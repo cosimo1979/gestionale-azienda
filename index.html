@@ -90,7 +90,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 #supabaseStatus{position:fixed;left:16px;bottom:62px;z-index:5000;padding:9px 12px;border-radius:8px;background:#fff;border:1px solid #dfe4e8;font:13px Arial;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none}
 </style>
 <script>
-const SUPABASE_URL = "https://heqyihqeakctkwwrbnvn.supabase.co";
+const SUPABASE_URL = "https://heqyihqeacktkwrbnvn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8eATgwR26e8oAy28jOxXhQ_ijKEksnh";
 
 async function testSupabaseConnection(){
@@ -286,39 +286,6 @@ const KEY='gestionale_v2_data';
 let db=JSON.parse(localStorage.getItem(KEY)||'null')||{clients:[],jobs:[]};
 let currentJob=null, currentTab='overview';
 const save=()=>{localStorage.setItem(KEY,JSON.stringify(db));renderAll()};
-let supabaseReady=false;
-async function initSupabaseClients(){
-  try{
-    if(!window.supabase || !window.supabase.createClient) return;
-    window.gestionaleSupabase = window.gestionaleSupabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-    const {data,error}=await window.gestionaleSupabase.from('clienti').select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at,updated_at').order('created_at',{ascending:true});
-    if(error){ console.error('Caricamento clienti Supabase:',error); return; }
-    db.clients=(data||[]).map(c=>({id:c.id,name:c.nome_ragione_sociale,tax:c.codice_fiscale_piva,phone:c.telefono,email:c.email,address:c.indirizzo,notes:c.note,created_at:c.created_at,updated_at:c.updated_at}));
-    localStorage.setItem(KEY,JSON.stringify(db));
-    supabaseReady=true;
-    renderAll();
-  }catch(e){console.error('Init clienti Supabase:',e)}
-}
-async function saveClientToSupabase(client){
-  if(!window.gestionaleSupabase) window.gestionaleSupabase=window.supabase?.createClient?.(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-  if(!window.gestionaleSupabase) throw new Error('Supabase non disponibile');
-  const {data,error}=await window.gestionaleSupabase.from('clienti').insert({
-    nome_ragione_sociale:client.name,
-    codice_fiscale_piva:client.tax,
-    telefono:client.phone,
-    email:client.email,
-    indirizzo:client.address,
-    note:client.notes
-  }).select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at,updated_at').single();
-  if(error) throw error;
-  return {id:data.id,name:data.nome_ragione_sociale,tax:data.codice_fiscale_piva,phone:data.telefono,email:data.email,address:data.indirizzo,notes:data.note,created_at:data.created_at,updated_at:data.updated_at};
-}
-async function deleteClientFromSupabase(cid){
-  if(!window.gestionaleSupabase) return;
-  const {error}=await window.gestionaleSupabase.from('clienti').delete().eq('id',cid);
-  if(error) throw error;
-}
-
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function showView(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById(v).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));renderAll()}
@@ -355,8 +322,8 @@ function renderClients(){
  const phone=document.getElementById('c_phone');
  const tax=document.getElementById('c_tax');
 
- phone.addEventListener('input',()=>{phone.value=phone.value.replace(/\\D/g,'').slice(0,10);});
- tax.addEventListener('input',()=>{tax.value=tax.value.toUpperCase().replace(/\\s/g,'').slice(0,16);});
+ phone.addEventListener('input',()=>{phone.value=phone.value.replace(/\D/g,'').slice(0,10);});
+ tax.addEventListener('input',()=>{tax.value=tax.value.toUpperCase().replace(/\s/g,'').slice(0,16);});
 
  form.addEventListener('submit',async function(e){
    e.preventDefault();
@@ -364,29 +331,35 @@ function renderClients(){
          email=c_email.value.trim(), address=c_address.value.trim(), notes=c_notes.value.trim();
 
    if(!name||!taxv||!phonev||!email||!address){alert('Compila tutti i campi obbligatori (*)');return}
-   if(!/^(?:\\d{16}|\\d{11})$/.test(taxv) && !/^[A-Z0-9]{16}$/.test(taxv)){
+   if(!/^(?:\d{16}|\d{11})$/.test(taxv) && !/^[A-Z0-9]{16}$/.test(taxv)){
      alert('Codice fiscale: inserisci esattamente 16 caratteri, oppure Partita IVA: esattamente 11 cifre.');
      tax.focus();return;
    }
-   if(/^\\d{11}$/.test(taxv)===false && taxv.length!==16){
+   if(/^\d{11}$/.test(taxv)===false && taxv.length!==16){
      alert('Il Codice Fiscale deve avere esattamente 16 caratteri.');
      tax.focus();return;
    }
    if(phonev.length!==10){alert('Il numero di telefono deve essere composto da esattamente 10 cifre.');phone.focus();return}
-   if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){alert('Inserisci un indirizzo email valido.');c_email.focus();return}
+   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Inserisci un indirizzo email valido.');c_email.focus();return}
 
-   const btn=form.querySelector('button[type="submit"]');
-   if(btn){btn.disabled=true;btn.textContent='Salvataggio…';}
    try{
-     const client=await saveClientToSupabase({name,tax:taxv,phone:phonev,email,address,notes});
-     db.clients.push(client);
+     const sb=await getGestionaleSupabase();
+     const {data,error}=await sb.from('clienti').insert({
+       nome_ragione_sociale:name,
+       codice_fiscale_piva:taxv,
+       telefono:phonev,
+       email:email,
+       indirizzo:address,
+       note:notes || null
+     }).select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note').single();
+     if(error) throw error;
+     db.clients.push(rowToClient(data));
      localStorage.setItem(KEY,JSON.stringify(db));
-     alert('Cliente salvato correttamente su Supabase.');
+     alert('Cliente salvato correttamente in Supabase.');
      renderAll();
    }catch(err){
-     console.error('Salvataggio cliente:',err);
-     alert('Errore nel salvataggio del cliente su Supabase. Controlla la Console per il dettaglio.');
-     if(btn){btn.disabled=false;btn.textContent='Salva cliente';}
+     console.error('Errore salvataggio cliente:',err);
+     alert('Errore nel salvataggio del cliente su Supabase. Controlla la console per i dettagli.');
    }
  });
 }
@@ -395,10 +368,16 @@ async function deleteClient(cid){
  if(db.jobs.some(j=>j.clientId===cid)){alert('Non puoi eliminare un cliente con commesse.');return}
  if(!confirm('Eliminare il cliente?')) return;
  try{
-   await deleteClientFromSupabase(cid);
+   const sb=await getGestionaleSupabase();
+   const {error}=await sb.from('clienti').delete().eq('id',cid);
+   if(error) throw error;
    db.clients=db.clients.filter(c=>c.id!==cid);
-   save();
- }catch(err){console.error('Eliminazione cliente:',err);alert("Errore nell'eliminazione del cliente su Supabase.");}
+   localStorage.setItem(KEY,JSON.stringify(db));
+   renderAll();
+ }catch(err){
+   console.error('Errore eliminazione cliente:',err);
+   alert('Errore nell’eliminazione del cliente su Supabase.');
+ }
 }
 function renderNewJob(){
  const el=document.getElementById('newjob');
@@ -533,9 +512,9 @@ function practiceTab(j){
 function updatePracticeValue(docName,value){
  currentJob.practice=currentJob.practice||{docs:{},files:{},values:{}};
  currentJob.practice.values=currentJob.practice.values||{};
- if(docName==='Telefono') value=value.replace(/\\D/g,'').slice(0,10);
- if(docName==='POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,14);
- if(docName==='IBAN del titolare POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,27);
+ if(docName==='Telefono') value=value.replace(/\D/g,'').slice(0,10);
+ if(docName==='POD') value=value.toUpperCase().replace(/\s/g,'').slice(0,14);
+ if(docName==='IBAN del titolare POD') value=value.toUpperCase().replace(/\s/g,'').slice(0,27);
  currentJob.practice.values[docName]=value;
  // Changing the value requires a new verification.
  currentJob.practice.docs[docName]=false;
@@ -570,10 +549,10 @@ function verifyPracticeDoc(docName, checked){
 
  if(!file && !value){alert('Prima devi inserire il dato oppure caricare il documento.');renderJobDetail();return}
  if(checked){
-   if(docName==='Telefono' && !/^\\d{10}$/.test(value)){alert('Il telefono deve contenere esattamente 10 cifre.');renderJobDetail();return}
-   if(docName==='IBAN del titolare POD' && !/^IT\\d{25}$/.test(value)){alert('L’IBAN italiano deve contenere esattamente 27 caratteri e iniziare con IT.');renderJobDetail();return}
+   if(docName==='Telefono' && !/^\d{10}$/.test(value)){alert('Il telefono deve contenere esattamente 10 cifre.');renderJobDetail();return}
+   if(docName==='IBAN del titolare POD' && !/^IT\d{25}$/.test(value)){alert('L’IBAN italiano deve contenere esattamente 27 caratteri e iniziare con IT.');renderJobDetail();return}
    if(docName==='POD' && value && value.length!==14){alert('Il POD deve contenere esattamente 14 caratteri.');renderJobDetail();return}
-   if(docName==='Email' && value && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value)){alert('Inserisci un indirizzo email valido.');renderJobDetail();return}
+   if(docName==='Email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)){alert('Inserisci un indirizzo email valido.');renderJobDetail();return}
  }
  currentJob.practice.docs[docName]=checked;
  jobSave();
@@ -589,7 +568,42 @@ function docsTab(j){return `<div class="field"><label>Carica documento</label><i
 function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
 function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup_gestionale_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
 function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.clients||!x.jobs)throw Error();db=x;currentJob=null;save();alert('Backup ripristinato.')}catch{alert('File backup non valido.')}};r.readAsText(file)}
+
+async function getGestionaleSupabase(){
+  if(!window.supabase || !window.supabase.createClient) throw new Error('Libreria Supabase non caricata');
+  window.gestionaleSupabase = window.gestionaleSupabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  return window.gestionaleSupabase;
+}
+
+function rowToClient(r){
+  return {
+    id:r.id,
+    name:r.nome_ragione_sociale || '',
+    tax:r.codice_fiscale_piva || '',
+    phone:r.telefono || '',
+    email:r.email || '',
+    address:r.indirizzo || '',
+    notes:r.note || ''
+  };
+}
+
+async function syncClientsFromSupabase(){
+  try{
+    const sb=await getGestionaleSupabase();
+    const {data,error}=await sb.from('clienti').select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note').order('created_at',{ascending:true});
+    if(error) throw error;
+    db.clients=(data||[]).map(rowToClient);
+    localStorage.setItem(KEY,JSON.stringify(db));
+    renderAll();
+    return true;
+  }catch(e){
+    console.error('Errore caricamento clienti da Supabase:',e);
+    return false;
+  }
+}
+
 renderAll();
+setTimeout(syncClientsFromSupabase, 0);
 </script>
 
 <style>
@@ -824,5 +838,3 @@ if(typeof _renderCurrentJob0==='function'){
   window.renderCurrentJob=function(){ _renderCurrentJob0(); setTimeout(appendTechnicalVerification,0); };
 }
 </script>
-
-<script>window.addEventListener('load',()=>{initSupabaseClients();});</script>
