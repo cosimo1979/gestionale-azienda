@@ -60,7 +60,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 <body>
 <header>
   <h1>Gestionale Azienda — V2</h1>
-  <div class="top-actions">
+  <div class="top-actions"><button type="button" class="secondary" id="supabaseTestBtn" onclick="testSupabaseConnection()">☁ Test Supabase</button>
     <button onclick="exportData()">Backup</button>
     <label class="btn secondary" style="display:inline-block;color:#26333d">Ripristina <input id="importFile" type="file" accept=".json" hidden onchange="importData(event)"><button type="button" class="secondary camera-pdf"
       onclick="openDocumentScanner('importFile_camera')">📷 Foto → PDF</button><input id="importFile_camera" type="file" accept="image/*" capture="environment"
@@ -83,6 +83,35 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+#supabaseTestBtn{position:fixed;left:16px;bottom:16px;z-index:5000}
+#supabaseStatus{position:fixed;left:16px;bottom:62px;z-index:5000;padding:9px 12px;border-radius:8px;background:#fff;border:1px solid #dfe4e8;font:13px Arial;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none}
+</style>
+<script>
+const SUPABASE_URL = "https://heqyihqeacktkwrbnvn.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8eATgwR26e8oAy28jOxKhQ_ijKEksnh";
+window.gestionaleSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+async function testSupabaseConnection(){
+  const status = document.getElementById('supabaseStatus');
+  status.style.display='block';
+  status.textContent='Verifica collegamento a Supabase…';
+  try{
+    const { error } = await window.gestionaleSupabase.from('clienti').select('id', { count:'exact', head:true });
+    if(error){
+      status.textContent='Supabase raggiunto, ma il database richiede ancora le autorizzazioni (RLS/policy).';
+      console.error('Supabase test:', error);
+      return;
+    }
+    status.textContent='✓ Supabase collegato correttamente';
+  }catch(e){
+    console.error(e);
+    status.textContent='✕ Collegamento Supabase non riuscito';
+  }
+}
+</script>
+
 
 <script>
 /* V2.6 - Verifica tecnica commessa */
