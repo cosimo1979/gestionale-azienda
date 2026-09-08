@@ -92,13 +92,17 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 <script>
 const SUPABASE_URL = "https://heqyihqeacktkwrbnvn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8eATgwR26e8oAy28jOxKhQ_ijKEksnh";
-window.gestionaleSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 async function testSupabaseConnection(){
   const status = document.getElementById('supabaseStatus');
   status.style.display='block';
   status.textContent='Verifica collegamento a Supabase…';
   try{
+    if(!window.supabase || !window.supabase.createClient){
+      status.textContent='✕ Libreria Supabase non caricata. Riprova tra qualche secondo.';
+      return;
+    }
+    window.gestionaleSupabase = window.gestionaleSupabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     const { error } = await window.gestionaleSupabase.from('clienti').select('id', { count:'exact', head:true });
     if(error){
       status.textContent='Supabase raggiunto, ma il database richiede ancora le autorizzazioni (RLS/policy).';
@@ -126,10 +130,10 @@ const TECH_SECTIONS = {
     ['collegamenti','Distanze, percorsi cavi, tubazioni e criticità'],
     ['fornitura','POD, distributore, tensione e dati di fornitura'],
     ['quadro','Posizione quadro, spazio disponibile, distanze e foto'],
-    ['terra','Dati dell'impianto di terra e misure disponibili']
+    ["terra","Dati dell'impianto di terra e misure disponibili"]
   ],
   'Impianto elettrico': [
-    ['sopralluogo','Misure, caratteristiche dell'impianto e criticità'],
+    ["sopralluogo","Misure, caratteristiche dell'impianto e criticità"],
     ['quadri','Quadri, posizioni, spazi e fotografie'],
     ['linee','Percorsi, lunghezze, tubazioni e sezioni'],
     ['materiali','Materiali principali e relative caratteristiche'],
