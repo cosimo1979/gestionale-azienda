@@ -311,29 +311,62 @@ async function loadClientsFromSupabase(){
   try{
     const sb=await getGestionaleSupabase();
     if(!sb) return;
-    const {data:cloud,error}=await sb.from('clienti').select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').order('created_at',{ascending:true});
-    if(error){ console.error('Caricamento clienti Supabase:',error); return; }
 
-    // Sincronizza eventuali clienti rimasti solo nel vecchio archivio locale.
-    const existing=new Map((cloud||[]).map(c=>[(c.codice_fiscale_piva||'').trim().toUpperCase(),c]));
-    const existingEmail=new Map((cloud||[]).map(c=>[(c.email||'').trim().toLowerCase(),c]));
-    for(const c of (db.clients||[])){
-      const tax=(c.tax||'').trim().toUpperCase();
-      const email=(c.email||'').trim().toLowerCase();
-      if(!tax || existing.has(tax) || (email && existingEmail.has(email))) continue;
-      const {data:inserted,error:insertError}=await sb.from('clienti').insert({
-        nome_regione_sociale:c.name,
-        codice_fiscale_piva:tax,
-        telefono:c.phone,
-        email:email,
-        indirizzo:c.address,
-        note:c.notes||null
-      }).select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').single();
-      if(insertError){ console.error('Sincronizzazione cliente:',insertError); }
-      else if(inserted){ cloud.push(inserted); existing.set(tax,inserted); if(email) existingEmail.set(email,inserted); }
+    // Prima leggiamo il cloud. NON sovrascriviamo subito l'archivio locale:
+    // eventuali clienti locali vengono prima sincronizzati su Supabase.
+    const {data:cloudRaw,error}=await sb.from('clienti').select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').order('created_at',{ascending:true});
+    if(error){ console.error('Caricamento clienti Supabase:',error); return; }
+    const cloud=[...(cloudRaw||[])];
+
+    const existingTax=new Map(cloud.map(c=>[(c.codice_fiscale_piva||'').trim().toUpperCase(),c]));
+    const existingEmail=new Map(cloud.map(c=>[(c.email||'').trim().toLowerCase(),c]));
+
+    // Recupero una tantum del cliente che era presente nell'archivio locale
+    // precedente alla sincronizzazione cloud. Se esiste già su Supabase viene ignorato.
+    const recoveryClients=[
+      {name:'giotto',tax:'07341986432',phone:'3333333345',email:'mimmo@gmail.com',address:'via lodi',notes:''}
+    ];
+
+    const localClients=[...(db.clients||[])];
+    const candidates=[...localClients];
+    for(const rc of recoveryClients){
+      const same=candidates.some(c=>
+        (c.tax||'').trim().toUpperCase()===rc.tax ||
+        ((c.email||'').trim().toLowerCase() && (c.email||'').trim().toLowerCase()===rc.email)
+      );
+      if(!same) candidates.push(rc);
     }
 
-    db.clients=(cloud||[]).map(c=>({
+    // Migra i clienti locali mancanti nel cloud.
+    for(const c of candidates){
+      const tax=(c.tax||'').trim().toUpperCase();
+      const email=(c.email||'').trim().toLowerCase();
+      if(!tax) continue;
+      if(existingTax.has(tax) || (email && existingEmail.has(email))) continue;
+
+      const {data:inserted,error:insertError}=await sb.from('clienti').insert({
+        nome_regione_sociale:c.name||'',
+        codice_fiscale_piva:tax,
+        telefono:c.phone||'',
+        email:email,
+        indirizzo:c.address||'',
+        note:c.notes||null
+      }).select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').single();
+
+      if(insertError){
+        console.error('Sincronizzazione cliente:',insertError,c);
+        continue;
+      }
+      if(inserted){
+        cloud.push(inserted);
+        existingTax.set(tax,inserted);
+        if(email) existingEmail.set(email,inserted);
+      }
+    }
+
+    // Manteniamo il database locale coerente con Supabase solo DOPO la sincronizzazione.
+    const oldClients=localClients;
+    const cloudClients=cloud.map(c=>({
       id:c.id,
       name:c.nome_regione_sociale||'',
       tax:c.codice_fiscale_piva||'',
@@ -342,6 +375,20 @@ async function loadClientsFromSupabase(){
       address:c.indirizzo||'',
       notes:c.note||''
     }));
+
+    // Se vecchie commesse usavano un ID locale, prova a riallinearle al nuovo UUID cloud
+    // usando codice fiscale o email del cliente.
+    const oldById=new Map(oldClients.map(c=>[c.id,c]));
+    const cloudByTax=new Map(cloudClients.map(c=>[(c.tax||'').trim().toUpperCase(),c]));
+    const cloudByEmail=new Map(cloudClients.map(c=>[(c.email||'').trim().toLowerCase(),c]));
+    for(const j of (db.jobs||[])){
+      const old=oldById.get(j.clientId);
+      if(!old) continue;
+      const match=cloudByTax.get((old.tax||'').trim().toUpperCase()) || cloudByEmail.get((old.email||'').trim().toLowerCase());
+      if(match) j.clientId=match.id;
+    }
+
+    db.clients=cloudClients;
     localStorage.setItem(KEY,JSON.stringify(db));
     renderAll();
   }catch(e){ console.error('loadClientsFromSupabase:',e); }
