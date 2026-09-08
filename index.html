@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gestionale Azienda V2</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#18212b;--muted:#667381;--line:#dfe4e8;--accent:#1769aa;--ok:#208a55;--warn:#c98300;--bad:#b64040}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#17212b;color:white;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:5}
+header h1{font-size:19px;margin:0}.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{border:0;border-radius:7px;padding:9px 12px;cursor:pointer;background:var(--accent);color:white;font-weight:600}
+button.secondary{background:#e8edf1;color:#26333d}.danger{background:#b64040!important}
+nav{display:flex;gap:4px;padding:8px;background:white;border-bottom:1px solid var(--line);overflow:auto;position:sticky;top:57px;z-index:4}
+nav button{background:white;color:#394753;border-radius:6px;white-space:nowrap}nav button.active{background:#e7f0f8;color:#0c5d99}
+main{max-width:1250px;margin:20px auto;padding:0 14px}.view{display:none}.view.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.card h2,.card h3{margin:0 0 13px}.muted{color:var(--muted)}.stat{font-size:30px;font-weight:700}.small{font-size:12px}
+label{display:block;font-weight:600;font-size:13px;margin-bottom:5px}.field{margin-bottom:12px}
+input,select,textarea{width:100%;border:1px solid #cfd6dc;border-radius:7px;padding:9px;background:white;font:inherit}
+textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}
+table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px;vertical-align:top}
+.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#eef1f4;font-size:12px}.ok{background:#e4f5ec;color:#176a42}.warn{background:#fff3da;color:#865900}.bad{background:#f9e5e5;color:#8e3030}
+.tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}.tabs button{background:#eef2f5;color:#394753}.tabs button.active{background:#1769aa;color:#fff}
+.check{display:flex;align-items:center;gap:8px;margin:8px 0}.check input{width:auto}.photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.photo-grid img{width:100%;height:120px;object-fit:cover;border-radius:7px;border:1px solid var(--line)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+@media(max-width:850px){.grid,.grid2{grid-template-columns:1fr 1fr}.photo-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.grid,.grid2{grid-template-columns:1fr}main{margin:12px auto}.card{padding:13px}header{position:static}nav{top:0}}
+.invalid{border-color:#b64040!important;background:#fff7f7}.field-help{font-size:11px;color:#8e3030;margin-top:4px}.valid-help{font-size:11px;color:#176a42;margin-top:4px}
+</style>
+
+<style>
+.verify-list{margin-top:14px}
+.verify-row{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:12px 0;border-top:1px solid #ddd}
+.verify-row:first-child{border-top:0}
+.verify-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.verify-actions select{padding:7px;border-radius:7px;border:1px solid #bbb}
+.progress-line{height:8px;background:#eee;border-radius:8px;overflow:hidden;margin:10px 0}
+.progress-line>div{height:100%;background:#5b8def}
+.badge.ok{background:#d9f2df}.badge.warn{background:#fff0c2}.badge.bad{background:#ffdada}
+.muted{opacity:.7;font-size:.9em}
+@media(max-width:700px){
+  .verify-row{flex-direction:column;align-items:stretch}
+  .verify-actions{justify-content:space-between}
+}
+</style>
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1f2937">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<style>
+#installAppBtn{display:none;position:fixed;right:16px;bottom:16px;z-index:5000;padding:11px 14px;border:0;border-radius:24px;box-shadow:0 3px 12px rgba(0,0,0,.2);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>Gestionale Azienda — V2</h1>
+  <div class="top-actions">
+    <button onclick="exportData()">Backup</button>
+    <label class="btn secondary" style="display:inline-block;color:#26333d">Ripristina <input id="importFile" type="file" accept=".json" hidden onchange="importData(event)"><button type="button" class="secondary camera-pdf"
+      onclick="openDocumentScanner('importFile_camera')">📷 Foto → PDF</button><input id="importFile_camera" type="file" accept="image/*" capture="environment"
+      style="display:none"
+      onchange="captureDocumentAsPdf('importFile_camera', )"></label>
+  </div>
+</header>
+<nav id="nav">
+  <button data-view="dashboard" onclick="showView('dashboard')">Dashboard</button>
+  <button data-view="clients" onclick="showView('clients')">Clienti</button>
+  <button data-view="jobs" onclick="showView('jobs')">Commesse</button>
+  <button data-view="newjob" onclick="showView('newjob')">Nuova commessa</button>
+</nav>
+<main>
+<section id="dashboard" class="view active"></section>
+<section id="clients" class="view"></section>
+<section id="jobs" class="view"></section>
+<section id="newjob" class="view"></section>
+<section id="jobdetail" class="view"></section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+/* V2.6 - Verifica tecnica commessa */
+const TECH_SECTIONS = {
+  'Fotovoltaico': [
+    ['impianto','Potenza impianto, moduli, marca/modello e configurazione stringhe'],
+    ['inverter','Marca, modello, potenza e numero inverter'],
+    ['accumulo','Presenza, marca, modello, capacità e potenza'],
+    ['copertura','Tipologia, struttura, orientamenti, inclinazioni e superfici'],
+    ['posizionamento','Posizione inverter e accumulo, note e foto'],
+    ['collegamenti','Distanze, percorsi cavi, tubazioni e criticità'],
+    ['fornitura','POD, distributore, tensione e dati di fornitura'],
+    ['quadro','Posizione quadro, spazio disponibile, distanze e foto'],
+    ['terra','Dati dell'impianto di terra e misure disponibili']
+  ],
+  'Impianto elettrico': [
+    ['sopralluogo','Misure, caratteristiche dell'impianto e criticità'],
+    ['quadri','Quadri, posizioni, spazi e fotografie'],
+    ['linee','Percorsi, lunghezze, tubazioni e sezioni'],
+    ['materiali','Materiali principali e relative caratteristiche'],
+    ['progetto','Schema, relazione ed elaborati quando necessari']
+  ],
+  'Quadro elettrico': [
+    ['quadro','Posizione, dimensioni, spazio disponibile e foto'],
+    ['apparecchiature','Apparecchiature e caratteristiche principali'],
+    ['linee','Linee in ingresso/uscita, percorsi e sezioni'],
+    ['progetto','Schema unifilare e documentazione di progetto']
+  ],
+  'Manutenzione': [
+    ['impianto','Descrizione impianto e stato rilevato'],
+    ['intervento','Attività eseguite e materiali utilizzati'],
+    ['prove','Prove/verifiche effettuate e risultato'],
+    ['foto','Foto prima/durante/dopo']
+  ]
+};
+
+function ensureTechStatus(job){
+  if(!job.techStatus) job.techStatus = {};
+  return job.techStatus;
+}
+function techSet(jobId, key, status){
+  const j = jobs.find(x=>String(x.id)===String(jobId));
+  if(!j) return;
+  ensureTechStatus(j)[key] = status;
+  save();
+  renderCurrentJob();
+}
+function techStatusFor(job,key){
+  return (job.techStatus && job.techStatus[key]) || 'missing';
+}
+function techLabel(s){
+  return s==='complete' ? 'Completato' : s==='verify' ? 'Da verificare' : 'Da inserire';
+}
+function techClass(s){
+  return s==='complete' ? 'ok' : s==='verify' ? 'warn' : 'bad';
+}
+function technicalVerificationHtml(job){
+  const type = job.type || 'Altro';
+  const rows = TECH_SECTIONS[type] || [];
+  if(!rows.length) return '';
+  const statuses = ensureTechStatus(job);
+  let complete=0;
+  const body = rows.map(([key,desc])=>{
+    const s=techStatusFor(job,key);
+    if(s==='complete') complete++;
+    return `<div class="verify-row">
+      <div><b>${desc}</b><div class="muted">${key}</div></div>
+      <div class="verify-actions">
+        <select onchange="techSet('${job.id}','${key}',this.value)">
+          <option value="missing" ${s==='missing'?'selected':''}>Da inserire</option>
+          <option value="verify" ${s==='verify'?'selected':''}>Da verificare</option>
+          <option value="complete" ${s==='complete'?'selected':''}>Completato</option>
+        </select>
+        <span class="badge ${techClass(s)}">${techLabel(s)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <h3>Verifica informazioni tecniche</h3>
+    <p class="muted">Ogni sezione segue il flusso: inserimento → verifica → completato.</p>
+    <div class="progress-line"><div style="width:${rows.length?Math.round(complete/rows.length*100):0}%"></div></div>
+    <b>${complete}/${rows.length} sezioni completate</b>
+    <div class="verify-list">${body}</div>
+  </div>`;
+}
+
+function technicalSummary(job){
+  const rows = TECH_SECTIONS[job.type||'Altro'] || [];
+  const st = ensureTechStatus(job);
+  const missing = rows.filter(r=>techStatusFor(job,r[0])!=='complete').length;
+  return missing ? `Mancano ${missing} verifiche tecniche` : 'Dati tecnici completi';
+}
+</script>
+<script>
+async function captureDocumentAsPdf(inputId, jobId, docKey, extra) {
+  const input = document.getElementById(inputId);
+  if (!input || !input.files || !input.files.length) return;
+  const files = Array.from(input.files);
+  const imageFiles = files.filter(f => f.type.startsWith('image/'));
+  if (!imageFiles.length) return;
+
+  try {
+    const { jsPDF } = window.jspdf;
+    let pdf = null;
+
+    for (const file of imageFiles) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+
+      const img = await new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = reject;
+        im.src = dataUrl;
+      });
+
+      const landscape = img.width > img.height;
+      const orientation = landscape ? 'landscape' : 'portrait';
+      const pageW = landscape ? 297 : 210;
+      const pageH = landscape ? 210 : 297;
+
+      if (!pdf) {
+        pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+      } else {
+        pdf.addPage('a4', orientation);
+      }
+
+      const margin = 8;
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2;
+      const ratio = Math.min(maxW / img.width, maxH / img.height);
+      const w = img.width * ratio;
+      const h = img.height * ratio;
+      const x = (pageW - w) / 2;
+      const y = (pageH - h) / 2;
+
+      pdf.addImage(dataUrl, 'JPEG', x, y, w, h, undefined, 'FAST');
+    }
+
+    const blob = pdf.output('blob');
+    const pdfFile = new File([blob], 'documento-scansionato.pdf', { type: 'application/pdf' });
+
+    const dt = new DataTransfer();
+    dt.items.add(pdfFile);
+    input.files = dt.files;
+
+    if (typeof updateDocFile === 'function') {
+      updateDocFile(jobId, docKey, input);
+    } else if (typeof jobSave === 'function') {
+      jobSave();
+    }
+
+    const status = document.getElementById(inputId + '_status');
+    if (status) status.textContent = 'PDF creato dalla foto e caricato';
+  } catch (e) {
+    console.error(e);
+    alert('Non è stato possibile trasformare la foto in PDF.');
+  }
+}
+</script>
+<script>
+const KEY='gestionale_v2_data';
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{clients:[],jobs:[]};
+let currentJob=null, currentTab='overview';
+const save=()=>{localStorage.setItem(KEY,JSON.stringify(db));renderAll()};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function showView(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById(v).classList.add('active');document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===v));renderAll()}
+function renderAll(){renderDashboard();renderClients();renderJobs();renderNewJob();if(currentJob)renderJobDetail()}
+function renderDashboard(){
+ const el=document.getElementById('dashboard'), open=db.jobs.filter(j=>j.status!=='Chiusa').length, blocked=db.jobs.filter(j=>j.status==='Bloccata').length;
+ el.innerHTML=`<div class="grid">
+ <div class="card"><div class="muted">Clienti</div><div class="stat">${db.clients.length}</div></div>
+ <div class="card"><div class="muted">Commesse aperte</div><div class="stat">${open}</div></div>
+ <div class="card"><div class="muted">Commesse bloccate</div><div class="stat">${blocked}</div></div></div>
+ <div class="card"><h2>Situazione commesse</h2>${db.jobs.length?`<table><tr><th>Commessa</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${db.jobs.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessuna commessa. Crea il primo cliente e poi la commessa.</div>'}</div>`;
+}
+function clientName(cid){return db.clients.find(c=>c.id===cid)?.name||'—'}
+function badge(s){let cls=s==='Completata'||s==='Chiusa'?'ok':s==='Bloccata'?'bad':s==='In corso'?'warn':'';return `<span class="badge ${cls}">${esc(s)}</span>`}
+function progress(j){let tasks=j.tasks||[];return tasks.length?Math.round(tasks.filter(t=>t.status==='Completata').length/tasks.length*100):0}
+function renderClients(){
+ const el=document.getElementById('clients');
+ el.innerHTML=`<div class="card"><h2>Nuovo cliente</h2>
+ <div class="small muted" style="margin-bottom:12px">I campi con * sono obbligatori. I dati numerici devono rispettare la lunghezza prevista.</div>
+ <form id="clientForm" novalidate>
+ <div class="grid2">
+ <div class="field"><label>Nome / Ragione sociale *</label><input id="c_name" required></div>
+ <div class="field"><label>Codice fiscale / P.IVA *</label><input id="c_tax" maxlength="16" required placeholder="CF (16) oppure P.IVA (11)"></div>
+ <div class="field"><label>Telefono *</label><input id="c_phone" inputmode="numeric" maxlength="10" required placeholder="10 cifre"></div>
+ <div class="field"><label>Email *</label><input id="c_email" type="email" required></div>
+ <div class="field"><label>Indirizzo *</label><input id="c_address" required></div>
+ <div class="field"><label>Note</label><input id="c_notes"></div>
+ </div>
+ <button type="submit">Salva cliente</button>
+ </form></div>
+ <div class="card"><h2>Clienti</h2>${db.clients.length?`<table><tr><th>Cliente</th><th>Contatti</th><th>Commesse</th><th></th></tr>${db.clients.map(c=>`<tr><td><b>${esc(c.name)}</b><br><span class="small muted">${esc(c.tax)}</span></td><td>${esc(c.phone)}<br>${esc(c.email)}</td><td>${db.jobs.filter(j=>j.clientId===c.id).length}</td><td><button class="danger" onclick="deleteClient('${c.id}')">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun cliente inserito.</div>'}</div>`;
+
+ const form=document.getElementById('clientForm');
+ const phone=document.getElementById('c_phone');
+ const tax=document.getElementById('c_tax');
+
+ phone.addEventListener('input',()=>{phone.value=phone.value.replace(/\\D/g,'').slice(0,10);});
+ tax.addEventListener('input',()=>{tax.value=tax.value.toUpperCase().replace(/\\s/g,'').slice(0,16);});
+
+ form.addEventListener('submit',function(e){
+   e.preventDefault();
+   const name=c_name.value.trim(), taxv=tax.value.trim(), phonev=phone.value.trim(),
+         email=c_email.value.trim(), address=c_address.value.trim(), notes=c_notes.value.trim();
+
+   if(!name||!taxv||!phonev||!email||!address){alert('Compila tutti i campi obbligatori (*)');return}
+   if(!/^(?:\\d{16}|\\d{11})$/.test(taxv) && !/^[A-Z0-9]{16}$/.test(taxv)){
+     alert('Codice fiscale: inserisci esattamente 16 caratteri, oppure Partita IVA: esattamente 11 cifre.');
+     tax.focus();return;
+   }
+   if(/^\\d{11}$/.test(taxv)===false && taxv.length!==16){
+     alert('Il Codice Fiscale deve avere esattamente 16 caratteri.');
+     tax.focus();return;
+   }
+   if(phonev.length!==10){alert('Il numero di telefono deve essere composto da esattamente 10 cifre.');phone.focus();return}
+   if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){alert('Inserisci un indirizzo email valido.');c_email.focus();return}
+
+   db.clients.push({id:id(),name,tax:taxv,phone:phonev,email,address,notes});
+   localStorage.setItem(KEY,JSON.stringify(db));
+   alert('Cliente salvato correttamente.');
+   renderAll();
+ });
+}
+
+function deleteClient(cid){if(db.jobs.some(j=>j.clientId===cid)){alert('Non puoi eliminare un cliente con commesse.');return}if(confirm('Eliminare il cliente?')){db.clients=db.clients.filter(c=>c.id!==cid);save()}}
+function renderNewJob(){
+ const el=document.getElementById('newjob');
+ el.innerHTML=`<div class="card"><h2>Crea nuova commessa</h2>${db.clients.length?`<form onsubmit="addJob(event)">
+ <div class="grid2"><div class="field"><label>Numero commessa *</label><input name="number" required placeholder="es. 2026-001"></div>
+ <div class="field"><label>Cliente *</label><select name="clientId" required>${db.clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+ <div class="field"><label>Tipo lavoro</label><select name="type"><option>Fotovoltaico</option><option>Impianto elettrico</option><option>Quadro elettrico</option><option>Manutenzione</option><option>Altro</option></select></div>
+ <div class="field"><label>Indirizzo lavori</label><input name="address"></div>
+ <div class="field"><label>Responsabile</label><input name="manager"></div>
+ <div class="field"><label>Stato</label><select name="status"><option>Nuova</option><option>In corso</option><option>Bloccata</option></select></div></div>
+ <div class="field"><label>Descrizione</label><textarea name="description"></textarea></div><button>Salva commessa</button></form>`:'<div class="empty">Prima devi creare almeno un cliente.</div>'}</div>`;
+}
+function addJob(e){e.preventDefault();let f=new FormData(e.target);let j={id:id(),number:f.get('number'),clientId:f.get('clientId'),type:f.get('type'),address:f.get('address'),manager:f.get('manager'),status:f.get('status'),description:f.get('description'),created:new Date().toISOString(),survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(f.get('type')),photos:[],documents:[],testing:{},invoices:[]};db.jobs.push(j);save();openJob(j.id)}
+function defaultTasks(type){if(type==='Fotovoltaico')return ['Preparazione area','Montaggio struttura','Installazione moduli','Posa tubazioni','Posa cavi','Installazione inverter','Installazione accumulo','Installazione quadri','Collegamenti elettrici','Prove e verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}));return ['Preparazione','Lavorazione','Verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}))}
+function renderJobs(){
+ const el=document.getElementById('jobs');
+ el.innerHTML=`<div class="card"><div class="row"><div><h2 style="margin:0">Commesse</h2></div><input id="jobSearch" placeholder="Cerca numero, cliente, tipo..." oninput="filterJobs()"></div><div id="jobTable"></div></div>`;filterJobs()
+}
+function filterJobs(){let q=(document.getElementById('jobSearch')?.value||'').toLowerCase();let rows=db.jobs.filter(j=>(j.number+' '+clientName(j.clientId)+' '+j.type).toLowerCase().includes(q));document.getElementById('jobTable').innerHTML=rows.length?`<table><tr><th>Numero</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${rows.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun risultato.</div>'}
+function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail')}
+function jobSave(){let j=db.jobs.find(x=>x.id===currentJob.id);Object.assign(j,currentJob);save()}
+function renderJobDetail(){
+ const j=currentJob;if(!j)return;const el=document.getElementById('jobdetail');
+ const tabs=[['overview','Anagrafica'],['survey','Sopralluogo'],['pv','Fotovoltaico'],['practice','Pratica connessione'],['tasks','Lavorazioni'],['photos','Foto'],['docs','Documenti'],['test','Collaudo'],['billing','Fatture']];
+ el.innerHTML=`<div class="card"><div class="row"><div><h2>${esc(j.number)} — ${esc(clientName(j.clientId))}</h2><div class="muted">${esc(j.type)} · ${badge(j.status)}</div></div><div><button class="secondary" onclick="showView('jobs')">← Commesse</button></div></div></div>
+ <div class="tabs">${tabs.map(t=>`<button class="${currentTab===t[0]?'active':''}" onclick="currentTab='${t[0]}';renderJobDetail()">${t[1]}</button>`).join('')}</div><div class="card">${renderTab(j)}</div>`;
+}
+function inputField(label,path,val,type='text'){return `<div class="field"><label>${label}</label><input type="${type}" value="${esc(val)}" data-path="${path}" onchange="setPath(this)"></div>`}
+function setPath(el){let p=el.dataset.path.split('.'),o=currentJob;for(let i=0;i<p.length-1;i++){if(!o[p[i]])o[p[i]]={};o=o[p[i]]}o[p[p.length-1]]=el.value;jobSave()}
+function renderTab(j){
+ if(currentTab==='overview')return `<div class="grid2">${inputField('Numero commessa','number',j.number)}${inputField('Indirizzo lavori','address',j.address)}${inputField('Responsabile','manager',j.manager)}<div class="field"><label>Stato</label><select onchange="currentJob.status=this.value;jobSave()">${['Nuova','In corso','Bloccata','Completata','Chiusa'].map(s=>`<option ${s===j.status?'selected':''}>${s}</option>`).join('')}</select></div></div><div class="field"><label>Descrizione</label><textarea onchange="currentJob.description=this.value;jobSave()">${esc(j.description)}</textarea></div>`;
+ if(currentTab==='survey')return `<div class="grid2">${inputField('Data sopralluogo','survey.date',j.survey.date)}${inputField('Tecnico','survey.technician',j.survey.technician)}</div><div class="field"><label>Misure / note sopralluogo</label><textarea onchange="currentJob.survey.notes=this.value;jobSave()">${esc(j.survey.notes)}</textarea></div><div class="field"><label>Foto pre-lavori</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>`;
+ if(currentTab==='pv')return pvTab(j);
+ if(currentTab==='practice')return practiceTab(j);
+ if(currentTab==='tasks')return tasksTab(j);
+ if(currentTab==='photos')return photosTab(j);
+ if(currentTab==='docs')return docsTab(j);
+ if(currentTab==='test')return `<div class="grid2">${inputField('Data collaudo','testing.date',j.testing.date)}${inputField('Tecnico','testing.technician',j.testing.technician)}</div><div class="field"><label>Esito</label><select onchange="j.testing.result=this.value;jobSave()">${['Da eseguire','Positivo','Negativo'].map(s=>`<option ${s===j.testing.result?'selected':''}>${s}</option>`).join('')}</select></div><div class="field"><label>Prove / note</label><textarea onchange="j.testing.notes=this.value;jobSave()">${esc(j.testing.notes)}</textarea></div><div class="field"><label>Verbale collaudo</label><input type="file" multiple onchange="addDocumentFiles(event,'Verbale collaudo')"></div>`;
+ if(currentTab==='billing')return `<h3>Fatturazione</h3>${j.invoices.map((x,i)=>`<div class="card"><b>${esc(x.type)}</b> — € ${esc(x.amount)} — ${esc(x.status)}</div>`).join('')}<form onsubmit="addInvoice(event)" class="grid2"><div class="field"><label>Tipo</label><select name="type"><option>Acconto</option><option>SAL</option><option>Finale</option></select></div><div class="field"><label>Importo €</label><input name="amount" type="number" step="0.01"></div><div class="field"><label>Stato</label><select name="status"><option>Da fatturare</option><option>Fatturata</option><option>Pagata</option></select></div></div><button>Aggiungi</button></form>`;
+}
+function pvTab(j){j.pv=j.pv||{};return `<h3>Dati impianto</h3><div class="grid2">${inputField('Potenza impianto (kWp)','pv.power',j.pv.power)}${inputField('Numero moduli','pv.modules',j.pv.modules,'number')}${inputField('Marca moduli','pv.moduleBrand',j.pv.moduleBrand)}${inputField('Modello moduli','pv.moduleModel',j.pv.moduleModel)}${inputField('Potenza singolo modulo (W)','pv.modulePower',j.pv.modulePower,'number')}${inputField('Orientamento','pv.orientation',j.pv.orientation)}${inputField('Inclinazione','pv.tilt',j.pv.tilt)}${inputField('Numero stringhe','pv.strings',j.pv.strings,'number')}${inputField('Configurazione stringhe','pv.stringConfig',j.pv.stringConfig)}</div>
+ <h3>Inverter</h3><div class="grid2">${inputField('Marca','pv.invBrand',j.pv.invBrand)}${inputField('Modello','pv.invModel',j.pv.invModel)}${inputField('Potenza nominale (kW)','pv.invPower',j.pv.invPower)}${inputField('Numero inverter','pv.invNumber',j.pv.invNumber,'number')}</div>
+ <h3>Accumulo</h3><div class="grid2">${inputField('Presente (sì/no)','pv.storage',j.pv.storage)}${inputField('Marca','pv.stBrand',j.pv.stBrand)}${inputField('Modello','pv.stModel',j.pv.stModel)}${inputField('Capacità nominale (kWh)','pv.stCapacity',j.pv.stCapacity)}${inputField('Potenza (kW)','pv.stPower',j.pv.stPower)}${inputField('Numero batterie','pv.stNumber',j.pv.stNumber,'number')}</div>
+ <h3>Tetto e posizioni</h3><div class="grid2">${inputField('Tipologia tetto','pv.roofType',j.pv.roofType)}${inputField('Struttura tetto','pv.roofStructure',j.pv.roofStructure)}${inputField('Orientamento falde','pv.roofOrientation',j.pv.roofOrientation)}${inputField('Inclinazione falde','pv.roofTilt',j.pv.roofTilt)}${inputField('Superficie disponibile','pv.roofArea',j.pv.roofArea)}${inputField('Superficie moduli','pv.moduleArea',j.pv.moduleArea)}${inputField('Posizione inverter','pv.invPosition',j.pv.invPosition)}${inputField('Posizione accumulo','pv.stPosition',j.pv.stPosition)}</div>
+ <h3>Collegamenti</h3><div class="grid2">${inputField('Distanza inverter-contatore (m)','pv.dInvMeter',j.pv.dInvMeter)}${inputField('Percorso','pv.path',j.pv.path)}${inputField('Tubazione presente','pv.pipePresent',j.pv.pipePresent)}${inputField('Diametro tubazione','pv.pipeDiameter',j.pv.pipeDiameter)}${inputField('Tipo tubazione','pv.pipeType',j.pv.pipeType)}${inputField('Lunghezza tubazione (m)','pv.pipeLength',j.pv.pipeLength)}${inputField('Distanza moduli-inverter (m)','pv.dModInv',j.pv.dModInv)}${inputField('Distanza inverter-quadro (m)','pv.dInvPanel',j.pv.dInvPanel)}${inputField('Distanza inverter-contatore (m)','pv.dInvMeter2',j.pv.dInvMeter2)}${inputField('Distanza accumulo-inverter (m)','pv.dStInv',j.pv.dStInv)}</div>
+ <h3>Fornitura elettrica</h3><div class="grid2">${inputField('POD','pv.pod',j.pv.pod)}${inputField('Intestatario fornitura','pv.podHolder',j.pv.podHolder)}${inputField('Distributore','pv.distributor',j.pv.distributor)}${inputField('Tensione','pv.voltage',j.pv.voltage)}${inputField('Potenza disponibile','pv.availablePower',j.pv.availablePower)}${inputField('Potenza impegnata','pv.committedPower',j.pv.committedPower)}${inputField('Tipo contatore','pv.meterType',j.pv.meterType)}${inputField('Posizione contatore','pv.meterPosition',j.pv.meterPosition)}</div>
+ <h3>Quadro</h3><div class="grid2">${inputField('Posizione quadro','pv.panelPosition',j.pv.panelPosition)}${inputField('Distanza contatore-quadro (m)','pv.dMeterPanel',j.pv.dMeterPanel)}${inputField('Spazio disponibile','pv.panelSpace',j.pv.panelSpace)}</div>
+ <h3>Terra</h3><div class="grid2">${inputField('Impianto di terra presente','pv.groundPresent',j.pv.groundPresent)}${inputField('Punto collegamento','pv.groundPoint',j.pv.groundPoint)}${inputField('Distanza inverter-punto terra','pv.dInvGround',j.pv.dInvGround)}${inputField('Sezione PE','pv.peSection',j.pv.peSection)}</div>`;
+}
+function practiceTab(j){
+ j.practice=j.practice||{docs:{},files:{}};
+ j.practice.docs=j.practice.docs||{};
+ j.practice.files=j.practice.files||{};
+
+ const docs=[
+  'POD','IBAN del titolare POD','Email','Telefono','Documento identità fronte/retro','Dati catastali',
+  'DICO inverter','Regolamento d’esercizio inverter','DICO accumulo','Regolamento d’esercizio accumulo',
+  'Schema unifilare','Certificati inverter','Scheda tecnica inverter','Certificati accumulo',
+  'Scheda tecnica accumulo','Scheda tecnica moduli','Certificazioni moduli','Relazione tecnica','Elaborati grafici'
+ ];
+ const manual={
+   'POD':{placeholder:'es. IT001E123456789', maxlength:14, inputmode:'text'},
+   'IBAN del titolare POD':{placeholder:'IT + 25 caratteri', maxlength:27, inputmode:'text'},
+   'Email':{placeholder:'nome@dominio.it', maxlength:254, inputmode:'email'},
+   'Telefono':{placeholder:'10 cifre', maxlength:10, inputmode:'numeric'}
+ };
+
+ const statusOf=d=>{
+   if(!j.practice.files[d] && !(manual[d] && j.practice.values?.[d])) return ['Mancante','bad'];
+   if(j.practice.docs[d]) return ['Verificato','ok'];
+   return ['Caricato – da verificare','warn'];
+ };
+
+ return `<div class="small muted" style="margin-bottom:12px">
+   Per POD, IBAN, Email e Telefono puoi inserire il dato direttamente oppure caricare un documento. In entrambi i casi il dato deve essere verificato.
+ </div>
+ <div>${docs.map(d=>{
+   const [st,cls]=statusOf(d), file=j.practice.files[d], val=j.practice.values?.[d]||'';
+   const m=manual[d];
+   return `<div class="card" style="margin-bottom:8px;padding:12px">
+    <div class="row" style="align-items:center">
+      <div style="flex:2"><b>${esc(d)}</b><br><span class="badge ${cls}">${st}</span>
+      ${file?`<div class="small muted" style="margin-top:5px">📎 ${esc(file.name)}</div>`:''}</div>
+      ${m?`<div style="flex:2">
+        <input value="${esc(val)}" maxlength="${m.maxlength}" inputmode="${m.inputmode}" placeholder="${esc(m.placeholder)}"
+          oninput="updatePracticeValue(${JSON.stringify(d)},this.value)">
+        <div class="small muted" style="margin-top:4px">${d==='POD'?'14 caratteri':d==='IBAN del titolare POD'?'27 caratteri (IBAN italiano)':d==='Telefono'?'10 cifre':'indirizzo email valido'}</div>
+      </div>`:''}
+      <div style="flex:1">
+        <label class="btn secondary" style="display:inline-block;color:#26333d;text-align:center">
+          ${file?'Sostituisci':'Carica documento'}
+          <input type="file" hidden onchange="uploadPracticeDoc(event,${JSON.stringify(d)})">
+        </label>
+      </div>
+      <div style="flex:0 0 125px">
+        <label class="check" style="margin:0">
+          <input type="checkbox" ${((file||(m&&val))&&j.practice.docs[d])?'checked':''}
+            ${((file||(m&&val)))?'':'disabled'}
+            onchange="verifyPracticeDoc(${JSON.stringify(d)},this.checked)">
+          Verificato
+        </label>
+      </div>
+    </div>
+   </div>`;
+ }).join('')}</div>
+
+ <div class="card"><h3>Riepilogo documentazione</h3>
+ <div class="row">
+ <div><b>${docs.filter(d=>j.practice.files[d]|| (manual[d]&&j.practice.values?.[d])).length}/${docs.length}</b><br><span class="small muted">caricati/inseriti</span></div>
+ <div><b>${docs.filter(d=>j.practice.docs[d]).length}/${docs.length}</b><br><span class="small muted">verificati</span></div>
+ <div><b>${docs.filter(d=>!(j.practice.files[d]|| (manual[d]&&j.practice.values?.[d]))).length}</b><br><span class="small muted">mancanti</span></div>
+ </div></div>
+
+ <h3>Dati pratica</h3><div class="grid2">
+ ${inputField('Data ricezione documenti','practice.receivedDate',j.practice.receivedDate)}
+ ${inputField('Numero pratica','practice.number',j.practice.number)}
+ ${inputField('Data invio','practice.sendDate',j.practice.sendDate)}
+ ${inputField('Preventivo di connessione','practice.connectionQuote',j.practice.connectionQuote)}
+ ${inputField('Data ricezione preventivo','practice.quoteDate',j.practice.quoteDate)}
+ ${inputField('Importo eventuale','practice.quoteAmount',j.practice.quoteAmount)}
+ ${inputField('Data accettazione','practice.acceptDate',j.practice.acceptDate)}
+ ${inputField('Scadenza','practice.deadline',j.practice.deadline)}
+ ${inputField('Fine lavori','practice.endWorksDate',j.practice.endWorksDate)}
+ ${inputField('Invio fine lavori','practice.endWorksSend',j.practice.endWorksSend)}
+ </div>
+ <div class="field"><label>Integrazioni / note</label><textarea onchange="currentJob.practice.notes=this.value;jobSave()">${esc(j.practice.notes)}</textarea></div>
+ <div class="field"><label>Stato pratica</label><select onchange="currentJob.practice.status=this.value;jobSave()">
+ ${['Documenti da raccogliere','Pratica da presentare','In attesa del distributore','Preventivo ricevuto','Preventivo accettato','Autorizzata/da realizzare','Fine lavori da presentare','Pratica conclusa'].map(x=>`<option ${x===j.practice.status?'selected':''}>${x}</option>`).join('')}
+ </select></div>`;
+}
+
+function updatePracticeValue(docName,value){
+ currentJob.practice=currentJob.practice||{docs:{},files:{},values:{}};
+ currentJob.practice.values=currentJob.practice.values||{};
+ if(docName==='Telefono') value=value.replace(/\\D/g,'').slice(0,10);
+ if(docName==='POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,14);
+ if(docName==='IBAN del titolare POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,27);
+ currentJob.practice.values[docName]=value;
+ // Changing the value requires a new verification.
+ currentJob.practice.docs[docName]=false;
+ jobSave();
+}
+function uploadPracticeDoc(event, docName){
+ const file=event.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{
+   currentJob.practice=currentJob.practice||{docs:{},files:{}};
+   currentJob.practice.docs=currentJob.practice.docs||{};
+   currentJob.practice.files=currentJob.practice.files||{};
+   currentJob.practice.files[docName]={
+     name:file.name,
+     type:file.type,
+     size:file.size,
+     date:new Date().toISOString(),
+     data:reader.result
+   };
+   // Loading a new/replaced document resets verification until checked again.
+   currentJob.practice.docs[docName]=false;
+   jobSave();
+ };
+ reader.readAsDataURL(file);
+}
+
+function verifyPracticeDoc(docName, checked){
+ const p=currentJob.practice||{};
+ const value=p.values?.[docName]||'';
+ const file=p.files?.[docName];
+
+ if(!file && !value){alert('Prima devi inserire il dato oppure caricare il documento.');renderJobDetail();return}
+ if(checked){
+   if(docName==='Telefono' && !/^\\d{10}$/.test(value)){alert('Il telefono deve contenere esattamente 10 cifre.');renderJobDetail();return}
+   if(docName==='IBAN del titolare POD' && !/^IT\\d{25}$/.test(value)){alert('L’IBAN italiano deve contenere esattamente 27 caratteri e iniziare con IT.');renderJobDetail();return}
+   if(docName==='POD' && value && value.length!==14){alert('Il POD deve contenere esattamente 14 caratteri.');renderJobDetail();return}
+   if(docName==='Email' && value && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value)){alert('Inserisci un indirizzo email valido.');renderJobDetail();return}
+ }
+ currentJob.practice.docs[docName]=checked;
+ jobSave();
+}
+
+function tasksTab(j){return `<h3>Attività</h3>${j.tasks.map(t=>`<div class="card"><div class="row"><b>${esc(t.name)}</b><select onchange="let x=currentJob.tasks.find(z=>z.id==='${t.id}');x.status=this.value;jobSave()">${['Da fare','In corso','Completata','Problema'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></div><textarea placeholder="Note / problema..." onchange="let x=currentJob.tasks.find(z=>z.id==='${t.id}');x.note=this.value;jobSave()">${esc(t.note)}</textarea><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'${t.name.replace(/'/g,"\\'")}')"></div>`).join('')}<button onclick="addTask()">+ Aggiungi attività</button>`;
+}
+function addTask(){let n=prompt('Nome attività');if(n){currentJob.tasks.push({id:id(),name:n,status:'Da fare',note:''});jobSave()}}
+function addPhotoFiles(e,phase){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.photos.push({id:id(),phase,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
+function photosTab(j){return `<div class="field"><label>Carica foto</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${j.photos.length?`<div class="photo-grid">${j.photos.map(p=>`<div><img src="${p.data}" alt=""><div class="small">${esc(p.phase)}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="currentJob.photos=currentJob.photos.filter(x=>x.id!=='${p.id}');jobSave()">Elimina</button></div>`).join('')}</div>`:'<div class="empty">Nessuna foto.</div>'}`}
+function addDocumentFiles(e,label){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.documents.push({id:id(),label,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
+function docsTab(j){return `<div class="field"><label>Carica documento</label><input type="file" multiple onchange="addDocumentFiles(event,'Documento commessa')"></div>${j.documents.length?`<table><tr><th>Categoria</th><th>File</th><th>Data</th><th></th></tr>${j.documents.map(d=>`<tr><td>${esc(d.label)}</td><td><a href="${d.data}" download="${esc(d.name)}">${esc(d.name)}</a></td><td>${new Date(d.date).toLocaleString('it-IT')}</td><td><button class="danger" onclick="currentJob.documents=currentJob.documents.filter(x=>x.id!=='${d.id}');jobSave()">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun documento.</div>'}`}
+function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
+function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup_gestionale_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
+function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.clients||!x.jobs)throw Error();db=x;currentJob=null;save();alert('Backup ripristinato.')}catch{alert('File backup non valido.')}};r.readAsText(file)}
+renderAll();
+</script>
+
+<style>
+#docScannerModal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:none;padding:18px}
+#docScannerModal .scanner-box{max-width:900px;margin:auto;background:#fff;border-radius:14px;overflow:hidden;height:calc(100vh - 36px);display:flex;flex-direction:column}
+.scanner-head{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd}
+.scanner-video-wrap{position:relative;background:#111;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#scannerVideo{width:100%;height:100%;object-fit:contain}
+#scannerGuide{position:absolute;inset:9%;border:2px dashed rgba(255,255,255,.9);border-radius:5px;pointer-events:none}
+.scanner-controls{padding:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.scanner-pages{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;border-top:1px solid #ddd}
+.scanner-page{position:relative;flex:0 0 80px}
+.scanner-page img{width:80px;height:105px;object-fit:cover;border-radius:5px;border:1px solid #bbb}
+.scanner-page button{position:absolute;right:-4px;top:-4px;border:0;border-radius:50%;width:22px;height:22px}
+.scanner-status{text-align:center;font-size:.9em;padding:4px 10px}
+</style>
+
+<div id="docScannerModal">
+  <div class="scanner-box">
+    <div class="scanner-head">
+      <b>Scansione documento</b>
+      <button type="button" onclick="closeDocumentScanner()">✕</button>
+    </div>
+    <div class="scanner-video-wrap">
+      <video id="scannerVideo" autoplay playsinline></video>
+      <div id="scannerGuide"></div>
+    </div>
+    <div id="scannerStatus" class="scanner-status">Inquadra il documento e scatta la foto.</div>
+    <div class="scanner-controls">
+      <button type="button" onclick="scannerTakePhoto()">📷 Scatta</button>
+      <button type="button" onclick="scannerChoosePhoto()">🖼️ Galleria</button>
+      <button type="button" onclick="scannerFinish()" class="primary">✓ Crea PDF</button>
+      <button type="button" onclick="closeDocumentScanner()">Annulla</button>
+    </div>
+    <div id="scannerPages" class="scanner-pages"></div>
+    <input id="scannerFileInput" type="file" accept="image/*" multiple style="display:none">
+  </div>
+</div>
+
+<script>
+let scannerStream=null, scannerPages=[], scannerTargetInputId=null;
+
+function openDocumentScanner(inputId){
+  scannerTargetInputId=inputId;
+  scannerPages=[];
+  document.getElementById('scannerPages').innerHTML='';
+  document.getElementById('scannerStatus').textContent='Inquadra il documento e scatta la foto.';
+  document.getElementById('docScannerModal').style.display='block';
+  navigator.mediaDevices?.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}})
+    .then(s=>{scannerStream=s; document.getElementById('scannerVideo').srcObject=s;})
+    .catch(()=>document.getElementById('scannerStatus').textContent='Fotocamera non disponibile: usa "Galleria".');
+}
+function closeDocumentScanner(){
+  if(scannerStream) scannerStream.getTracks().forEach(t=>t.stop());
+  scannerStream=null;
+  document.getElementById('scannerVideo').srcObject=null;
+  document.getElementById('docScannerModal').style.display='none';
+}
+function scannerChoosePhoto(){ document.getElementById('scannerFileInput').click(); }
+
+document.addEventListener('change', e=>{
+  if(e.target.id!=='scannerFileInput') return;
+  [...e.target.files].forEach(file=>{
+    const r=new FileReader();
+    r.onload=()=>processScannerImage(r.result);
+    r.readAsDataURL(file);
+  });
+  e.target.value='';
+});
+
+function scannerTakePhoto(){
+  const v=document.getElementById('scannerVideo');
+  if(!v.videoWidth) return;
+  const c=document.createElement('canvas');
+  const max=2200, scale=Math.min(1,max/v.videoWidth);
+  c.width=Math.round(v.videoWidth*scale); c.height=Math.round(v.videoHeight*scale);
+  c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+  processScannerImage(c.toDataURL('image/jpeg',.94));
+}
+
+function cvReady(){
+  return typeof cv!=='undefined' && cv.Mat && cv.imread;
+}
+function orderPts(p){
+  p=p.slice().sort((a,b)=>a.y-b.y);
+  const top=p.slice(0,2).sort((a,b)=>a.x-b.x);
+  const bottom=p.slice(2,4).sort((a,b)=>a.x-b.x);
+  return [top[0],top[1],bottom[1],bottom[0]];
+}
+function processScannerImage(dataUrl){
+  document.getElementById('scannerStatus').textContent='Rilevamento foglio e correzione prospettiva…';
+  if(!cvReady()){
+    // If OpenCV has not loaded yet, retain the original image rather than failing.
+    addScannerPage(dataUrl);
+    document.getElementById('scannerStatus').textContent='Foto acquisita. Correzione automatica non ancora disponibile.';
+    return;
+  }
+  try{
+    const img=new Image();
+    img.onload=()=>{
+      const max=1800, scale=Math.min(1,max/img.width);
+      const c=document.createElement('canvas');
+      c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+
+      let src=cv.imread(c), gray=new cv.Mat(), blur=new cv.Mat(), edge=new cv.Mat(), contours=new cv.MatVector(), hier=new cv.Mat();
+      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray,blur,new cv.Size(5,5),0);
+      cv.Canny(blur,edge,50,150);
+      cv.findContours(edge,contours,hier,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+
+      let best=null,bestArea=0, imageArea=c.width*c.height;
+      for(let i=0;i<contours.size();i++){
+        let cnt=contours.get(i), peri=cv.arcLength(cnt,true), approx=new cv.Mat();
+        cv.approxPolyDP(cnt,approx,.02*peri,true);
+        let area=Math.abs(cv.contourArea(approx));
+        if(approx.rows===4 && area>bestArea && area>imageArea*.15){
+          bestArea=area; best=approx.clone();
+        }
+        approx.delete(); cnt.delete();
+      }
+
+      if(best){
+        let pts=[];
+        for(let i=0;i<4;i++){
+          pts.push({x:best.intAt(i,0),y:best.intAt(i,1)});
+        }
+        pts=orderPts(pts);
+        const w1=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);
+        const w2=Math.hypot(pts[2].x-pts[3].x,pts[2].y-pts[3].y);
+        const h1=Math.hypot(pts[3].x-pts[0].x,pts[3].y-pts[0].y);
+        const h2=Math.hypot(pts[2].x-pts[1].x,pts[2].y-pts[1].y);
+        const W=Math.max(600,Math.min(1800,Math.round(Math.max(w1,w2))));
+        const H=Math.max(800,Math.min(2400,Math.round(Math.max(h1,h2))));
+        const srcPts=cv.matFromArray(4,1,cv.CV_32FC2,pts.flatMap(p=>[p.x,p.y]));
+        const dstPts=cv.matFromArray(4,1,cv.CV_32FC2,[0,0,W-1,0,W-1,H-1,0,H-1]);
+        const M=cv.getPerspectiveTransform(srcPts,dstPts), dst=new cv.Mat();
+        cv.warpPerspective(src,dst,M,new cv.Size(W,H));
+        const out=document.createElement('canvas'); out.width=W; out.height=H;
+        cv.imshow(out,dst); addScannerPage(out.toDataURL('image/jpeg',.94));
+        srcPts.delete();dstPts.delete();M.delete();dst.delete();
+      }else{
+        addScannerPage(dataUrl);
+      }
+      src.delete();gray.delete();blur.delete();edge.delete();contours.delete();hier.delete();
+      document.getElementById('scannerStatus').textContent='Pagina acquisita. Puoi aggiungerne altre.';
+    };
+    img.src=dataUrl;
+  }catch(e){
+    console.error(e); addScannerPage(dataUrl);
+    document.getElementById('scannerStatus').textContent='Pagina acquisita.';
+  }
+}
+function addScannerPage(dataUrl){
+  scannerPages.push(dataUrl);
+  const box=document.getElementById('scannerPages');
+  const wrap=document.createElement('div'); wrap.className='scanner-page';
+  const im=document.createElement('img'); im.src=dataUrl;
+  const b=document.createElement('button'); b.textContent='×';
+  b.onclick=()=>{const i=scannerPages.indexOf(dataUrl); if(i>=0) scannerPages.splice(i,1); wrap.remove();};
+  wrap.append(im,b); box.appendChild(wrap);
+}
+async function scannerFinish(){
+  if(!scannerPages.length){ alert('Acquisisci almeno una pagina.'); return; }
+  if(!window.jspdf){ alert('Modulo PDF non disponibile.'); return; }
+  const {jsPDF}=window.jspdf;
+  let pdf=null;
+  for(const src of scannerPages){
+    const img=await new Promise((res,rej)=>{let i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});
+    const landscape=img.width>img.height, pw=landscape?297:210, ph=landscape?210:297;
+    if(!pdf) pdf=new jsPDF({orientation:landscape?'landscape':'portrait',unit:'mm',format:'a4'});
+    else pdf.addPage('a4',landscape?'landscape':'portrait');
+    const m=7, rw=pw-2*m, rh=ph-2*m, r=Math.min(rw/img.width,rh/img.height);
+    pdf.addImage(src,'JPEG',(pw-img.width*r)/2,(ph-img.height*r)/2,img.width*r,img.height*r,undefined,'FAST');
+  }
+  const blob=pdf.output('blob'), file=new File([blob],'documento-scansionato.pdf',{type:'application/pdf'});
+  const dt=new DataTransfer(); dt.items.add(file);
+  const target=document.getElementById(scannerTargetInputId);
+  if(target){target.files=dt.files; target.dispatchEvent(new Event('change',{bubbles:true}));}
+  closeDocumentScanner();
+}
+</script>
+
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
+}
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredInstallPrompt=e;
+  const b=document.getElementById('installAppBtn');
+  if(b) b.style.display='inline-block';
+});
+async function installGestionale(){
+  if(!deferredInstallPrompt){
+    alert('Se il pulsante non è disponibile, apri il gestionale in Chrome/Safari e usa "Aggiungi alla schermata Home".');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  const b=document.getElementById('installAppBtn');
+  if(b) b.style.display='none';
+}
+</script>
+<button id="installAppBtn" type="button" onclick="installGestionale()">📱 Installa app</button></body>
+</html>
+<script>
+function appendTechnicalVerification(){
+  try{
+    const j = (typeof currentJob !== 'undefined' && currentJob) ? currentJob : null;
+    if(!j) return;
+    const type = j.type || '';
+    if(!TECH_SECTIONS[type]) return;
+    const existing = document.getElementById('v26-tech-verification');
+    if(existing) existing.remove();
+
+    // Find the main visible job detail area.
+    const candidates = Array.from(document.querySelectorAll('.card, main, #app, body'));
+    let target = candidates.find(el => el.querySelector && el.querySelector('h2,h1') && /commessa|dettaglio/i.test(el.innerText||''));
+    if(!target) target = document.querySelector('main') || document.body;
+
+    const wrap=document.createElement('div');
+    wrap.id='v26-tech-verification';
+    wrap.innerHTML=technicalVerificationHtml(j);
+    target.appendChild(wrap);
+  }catch(e){console.error(e)}
+}
+const _renderCurrentJob0 = window.renderCurrentJob;
+if(typeof _renderCurrentJob0==='function'){
+  window.renderCurrentJob=function(){ _renderCurrentJob0(); setTimeout(appendTechnicalVerification,0); };
+}
+</script>
