@@ -301,6 +301,52 @@ function renderDashboard(){
 function clientName(cid){return db.clients.find(c=>c.id===cid)?.name||'—'}
 function badge(s){let cls=s==='Completata'||s==='Chiusa'?'ok':s==='Bloccata'?'bad':s==='In corso'?'warn':'';return `<span class="badge ${cls}">${esc(s)}</span>`}
 function progress(j){let tasks=j.tasks||[];return tasks.length?Math.round(tasks.filter(t=>t.status==='Completata').length/tasks.length*100):0}
+async function getGestionaleSupabase(){
+  if(!window.supabase || !window.supabase.createClient) return null;
+  window.gestionaleSupabase = window.gestionaleSupabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  return window.gestionaleSupabase;
+}
+
+async function loadClientsFromSupabase(){
+  try{
+    const sb=await getGestionaleSupabase();
+    if(!sb) return;
+    const {data:cloud,error}=await sb.from('clienti').select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').order('created_at',{ascending:true});
+    if(error){ console.error('Caricamento clienti Supabase:',error); return; }
+
+    // Sincronizza eventuali clienti rimasti solo nel vecchio archivio locale.
+    const existing=new Map((cloud||[]).map(c=>[(c.codice_fiscale_piva||'').trim().toUpperCase(),c]));
+    const existingEmail=new Map((cloud||[]).map(c=>[(c.email||'').trim().toLowerCase(),c]));
+    for(const c of (db.clients||[])){
+      const tax=(c.tax||'').trim().toUpperCase();
+      const email=(c.email||'').trim().toLowerCase();
+      if(!tax || existing.has(tax) || (email && existingEmail.has(email))) continue;
+      const {data:inserted,error:insertError}=await sb.from('clienti').insert({
+        nome_regione_sociale:c.name,
+        codice_fiscale_piva:tax,
+        telefono:c.phone,
+        email:email,
+        indirizzo:c.address,
+        note:c.notes||null
+      }).select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note,created_at').single();
+      if(insertError){ console.error('Sincronizzazione cliente:',insertError); }
+      else if(inserted){ cloud.push(inserted); existing.set(tax,inserted); if(email) existingEmail.set(email,inserted); }
+    }
+
+    db.clients=(cloud||[]).map(c=>({
+      id:c.id,
+      name:c.nome_regione_sociale||'',
+      tax:c.codice_fiscale_piva||'',
+      phone:c.telefono||'',
+      email:c.email||'',
+      address:c.indirizzo||'',
+      notes:c.note||''
+    }));
+    localStorage.setItem(KEY,JSON.stringify(db));
+    renderAll();
+  }catch(e){ console.error('loadClientsFromSupabase:',e); }
+}
+
 function renderClients(){
  const el=document.getElementById('clients');
  el.innerHTML=`<div class="card"><h2>Nuovo cliente</h2>
@@ -310,7 +356,7 @@ function renderClients(){
  <div class="field"><label>Nome / Ragione sociale *</label><input id="c_name" required></div>
  <div class="field"><label>Codice fiscale / P.IVA *</label><input id="c_tax" maxlength="16" required placeholder="CF (16) oppure P.IVA (11)"></div>
  <div class="field"><label>Telefono *</label><input id="c_phone" inputmode="numeric" maxlength="10" required placeholder="10 cifre"></div>
- <div class="field"><label>Email *</label><input id="c_email" type="email" required></div>
+ <div class="field"><label>Email *</label><input id="c_email" type="text" required placeholder="nome@dominio.it"></div>
  <div class="field"><label>Indirizzo *</label><input id="c_address" required></div>
  <div class="field"><label>Note</label><input id="c_notes"></div>
  </div>
@@ -319,65 +365,57 @@ function renderClients(){
  <div class="card"><h2>Clienti</h2>${db.clients.length?`<table><tr><th>Cliente</th><th>Contatti</th><th>Commesse</th><th></th></tr>${db.clients.map(c=>`<tr><td><b>${esc(c.name)}</b><br><span class="small muted">${esc(c.tax)}</span></td><td>${esc(c.phone)}<br>${esc(c.email)}</td><td>${db.jobs.filter(j=>j.clientId===c.id).length}</td><td><button class="danger" onclick="deleteClient('${c.id}')">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun cliente inserito.</div>'}</div>`;
 
  const form=document.getElementById('clientForm');
+ const nameEl=document.getElementById('c_name');
  const phone=document.getElementById('c_phone');
  const tax=document.getElementById('c_tax');
-
+ const emailEl=document.getElementById('c_email');
+ const addressEl=document.getElementById('c_address');
+ const notesEl=document.getElementById('c_notes');
  phone.addEventListener('input',()=>{phone.value=phone.value.replace(/\D/g,'').slice(0,10);});
  tax.addEventListener('input',()=>{tax.value=tax.value.toUpperCase().replace(/\s/g,'').slice(0,16);});
-
  form.addEventListener('submit',async function(e){
    e.preventDefault();
-   const name=c_name.value.trim(), taxv=tax.value.trim(), phonev=phone.value.trim(),
-         email=c_email.value.trim(), address=c_address.value.trim(), notes=c_notes.value.trim();
-
+   const name=nameEl.value.trim(), taxv=tax.value.trim().toUpperCase(), phonev=phone.value.trim(),
+         email=emailEl.value.trim(), address=addressEl.value.trim(), notes=notesEl.value.trim();
    if(!name||!taxv||!phonev||!email||!address){alert('Compila tutti i campi obbligatori (*)');return}
-   if(!/^(?:\d{16}|\d{11})$/.test(taxv) && !/^[A-Z0-9]{16}$/.test(taxv)){
+   if(!/^(?:\d{11}|[A-Z0-9]{16})$/.test(taxv)){
      alert('Codice fiscale: inserisci esattamente 16 caratteri, oppure Partita IVA: esattamente 11 cifre.');
      tax.focus();return;
    }
-   if(/^\d{11}$/.test(taxv)===false && taxv.length!==16){
-     alert('Il Codice Fiscale deve avere esattamente 16 caratteri.');
-     tax.focus();return;
-   }
    if(phonev.length!==10){alert('Il numero di telefono deve essere composto da esattamente 10 cifre.');phone.focus();return}
-   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Inserisci un indirizzo email valido.');c_email.focus();return}
+   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Inserisci un indirizzo email valido.');emailEl.focus();return}
 
-   try{
-     const sb=await getGestionaleSupabase();
-     const {data,error}=await sb.from('clienti').insert({
-       nome_ragione_sociale:name,
-       codice_fiscale_piva:taxv,
-       telefono:phonev,
-       email:email,
-       indirizzo:address,
-       note:notes || null
-     }).select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note').single();
-     if(error) throw error;
-     db.clients.push(rowToClient(data));
-     localStorage.setItem(KEY,JSON.stringify(db));
-     alert('Cliente salvato correttamente in Supabase.');
-     renderAll();
-   }catch(err){
-     console.error('Errore salvataggio cliente:',err);
-     alert('Errore nel salvataggio del cliente su Supabase. Controlla la console per i dettagli.');
+   const sb=await getGestionaleSupabase();
+   if(!sb){alert('Supabase non disponibile.');return}
+   const {data:inserted,error}=await sb.from('clienti').insert({
+     nome_regione_sociale:name,
+     codice_fiscale_piva:taxv,
+     telefono:phonev,
+     email:email,
+     indirizzo:address,
+     note:notes||null
+   }).select('id,nome_regione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note').single();
+   if(error){
+     console.error('Salvataggio cliente Supabase:',error);
+     alert('Errore nel salvataggio su Supabase: '+(error.message||'verifica le autorizzazioni della tabella clienti.'));
+     return;
    }
+   db.clients.push({id:inserted.id,name:inserted.nome_regione_sociale,tax:inserted.codice_fiscale_piva,phone:inserted.telefono,email:inserted.email,address:inserted.indirizzo,notes:inserted.note||''});
+   localStorage.setItem(KEY,JSON.stringify(db));
+   alert('Cliente salvato correttamente su Supabase.');
+   renderAll();
  });
 }
 
 async function deleteClient(cid){
- if(db.jobs.some(j=>j.clientId===cid)){alert('Non puoi eliminare un cliente con commesse.');return}
- if(!confirm('Eliminare il cliente?')) return;
- try{
-   const sb=await getGestionaleSupabase();
-   const {error}=await sb.from('clienti').delete().eq('id',cid);
-   if(error) throw error;
-   db.clients=db.clients.filter(c=>c.id!==cid);
-   localStorage.setItem(KEY,JSON.stringify(db));
-   renderAll();
- }catch(err){
-   console.error('Errore eliminazione cliente:',err);
-   alert('Errore nell’eliminazione del cliente su Supabase.');
- }
+  if(db.jobs.some(j=>j.clientId===cid)){alert('Non puoi eliminare un cliente con commesse.');return}
+  if(!confirm('Eliminare il cliente?')) return;
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  const {error}=await sb.from('clienti').delete().eq('id',cid);
+  if(error){console.error(error);alert('Errore durante l’eliminazione su Supabase: '+(error.message||''));return;}
+  db.clients=db.clients.filter(c=>c.id!==cid);
+  save();
 }
 function renderNewJob(){
  const el=document.getElementById('newjob');
@@ -512,9 +550,9 @@ function practiceTab(j){
 function updatePracticeValue(docName,value){
  currentJob.practice=currentJob.practice||{docs:{},files:{},values:{}};
  currentJob.practice.values=currentJob.practice.values||{};
- if(docName==='Telefono') value=value.replace(/\D/g,'').slice(0,10);
- if(docName==='POD') value=value.toUpperCase().replace(/\s/g,'').slice(0,14);
- if(docName==='IBAN del titolare POD') value=value.toUpperCase().replace(/\s/g,'').slice(0,27);
+ if(docName==='Telefono') value=value.replace(/\\D/g,'').slice(0,10);
+ if(docName==='POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,14);
+ if(docName==='IBAN del titolare POD') value=value.toUpperCase().replace(/\\s/g,'').slice(0,27);
  currentJob.practice.values[docName]=value;
  // Changing the value requires a new verification.
  currentJob.practice.docs[docName]=false;
@@ -549,10 +587,10 @@ function verifyPracticeDoc(docName, checked){
 
  if(!file && !value){alert('Prima devi inserire il dato oppure caricare il documento.');renderJobDetail();return}
  if(checked){
-   if(docName==='Telefono' && !/^\d{10}$/.test(value)){alert('Il telefono deve contenere esattamente 10 cifre.');renderJobDetail();return}
-   if(docName==='IBAN del titolare POD' && !/^IT\d{25}$/.test(value)){alert('L’IBAN italiano deve contenere esattamente 27 caratteri e iniziare con IT.');renderJobDetail();return}
+   if(docName==='Telefono' && !/^\\d{10}$/.test(value)){alert('Il telefono deve contenere esattamente 10 cifre.');renderJobDetail();return}
+   if(docName==='IBAN del titolare POD' && !/^IT\\d{25}$/.test(value)){alert('L’IBAN italiano deve contenere esattamente 27 caratteri e iniziare con IT.');renderJobDetail();return}
    if(docName==='POD' && value && value.length!==14){alert('Il POD deve contenere esattamente 14 caratteri.');renderJobDetail();return}
-   if(docName==='Email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)){alert('Inserisci un indirizzo email valido.');renderJobDetail();return}
+   if(docName==='Email' && value && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value)){alert('Inserisci un indirizzo email valido.');renderJobDetail();return}
  }
  currentJob.practice.docs[docName]=checked;
  jobSave();
@@ -568,42 +606,8 @@ function docsTab(j){return `<div class="field"><label>Carica documento</label><i
 function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
 function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup_gestionale_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
 function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.clients||!x.jobs)throw Error();db=x;currentJob=null;save();alert('Backup ripristinato.')}catch{alert('File backup non valido.')}};r.readAsText(file)}
-
-async function getGestionaleSupabase(){
-  if(!window.supabase || !window.supabase.createClient) throw new Error('Libreria Supabase non caricata');
-  window.gestionaleSupabase = window.gestionaleSupabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-  return window.gestionaleSupabase;
-}
-
-function rowToClient(r){
-  return {
-    id:r.id,
-    name:r.nome_ragione_sociale || '',
-    tax:r.codice_fiscale_piva || '',
-    phone:r.telefono || '',
-    email:r.email || '',
-    address:r.indirizzo || '',
-    notes:r.note || ''
-  };
-}
-
-async function syncClientsFromSupabase(){
-  try{
-    const sb=await getGestionaleSupabase();
-    const {data,error}=await sb.from('clienti').select('id,nome_ragione_sociale,codice_fiscale_piva,telefono,email,indirizzo,note').order('created_at',{ascending:true});
-    if(error) throw error;
-    db.clients=(data||[]).map(rowToClient);
-    localStorage.setItem(KEY,JSON.stringify(db));
-    renderAll();
-    return true;
-  }catch(e){
-    console.error('Errore caricamento clienti da Supabase:',e);
-    return false;
-  }
-}
-
 renderAll();
-setTimeout(syncClientsFromSupabase, 0);
+loadClientsFromSupabase();
 </script>
 
 <style>
