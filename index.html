@@ -394,92 +394,6 @@ async function loadClientsFromSupabase(){
   }catch(e){ console.error('loadClientsFromSupabase:',e); }
 }
 
-
-async function loadJobsFromSupabase(){
-  try{
-    const sb=await getGestionaleSupabase();
-    if(!sb) return;
-
-    const {data:rows,error}=await sb.from('commesse')
-      .select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at')
-      .order('created_at',{ascending:true});
-
-    if(error){
-      console.error('Caricamento commesse Supabase:',error);
-      return;
-    }
-
-    const cloud = rows || [];
-    const uuidRe=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-    // Sincronizza eventuali commesse già presenti solo nel browser.
-    for(const localJob of (db.jobs||[])){
-      let match=cloud.find(c=>c.id===localJob.id);
-      if(!match){
-        match=cloud.find(c=>
-          String(c.numero_commessa||'').trim()===String(localJob.number||'').trim() &&
-          c.cliente_id===localJob.clientId
-        );
-      }
-
-      if(!match && uuidRe.test(String(localJob.clientId||''))){
-        const {data:inserted,error:insErr}=await sb.from('commesse').insert({
-          cliente_id: localJob.clientId,
-          numero_commessa: localJob.number,
-          tipo_lavoro: localJob.type,
-          indirizzo_lavori: localJob.address || null,
-          responsabile: localJob.manager || null,
-          stato: localJob.status || 'Nuova',
-          descrizione: localJob.description || null,
-          data_apertura: localJob.created || new Date().toISOString()
-        }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
-
-        if(!insErr && inserted){
-          localJob.id=inserted.id;
-          cloud.push(inserted);
-        }else{
-          console.error('Sincronizzazione commessa locale:',insErr);
-        }
-      }
-    }
-
-    // Il cloud diventa la fonte dei dati principali, mantenendo nel browser
-    // tutte le sezioni operative già compilate della singola commessa.
-    const merged=cloud.map(c=>{
-      const old=(db.jobs||[]).find(j=>
-        j.id===c.id ||
-        (j.number===c.numero_commessa && j.clientId===c.cliente_id)
-      ) || {};
-
-      return Object.assign(old,{
-        id:c.id,
-        number:c.numero_commessa,
-        clientId:c.cliente_id,
-        type:c.tipo_lavoro,
-        address:c.indirizzo_lavori || '',
-        manager:c.responsabile || '',
-        status:c.stato || 'Nuova',
-        description:c.descrizione || '',
-        created:c.data_apertura || c.created_at || new Date().toISOString(),
-        closed:c.data_chiusura || ''
-      });
-    });
-
-    // Mantiene eventuali commesse locali che non è stato possibile sincronizzare,
-    // così non vengono perse dal browser.
-    const syncedIds=new Set(merged.map(j=>j.id));
-    for(const j of (db.jobs||[])){
-      if(!syncedIds.has(j.id)) merged.push(j);
-    }
-
-    db.jobs=merged;
-    localStorage.setItem(KEY,JSON.stringify(db));
-    renderAll();
-  }catch(e){
-    console.error('loadJobsFromSupabase:',e);
-  }
-}
-
 function renderClients(){
  const el=document.getElementById('clients');
  el.innerHTML=`<div class="card"><h2>Nuovo cliente</h2>
@@ -561,66 +475,7 @@ function renderNewJob(){
  <div class="field"><label>Stato</label><select name="status"><option>Nuova</option><option>In corso</option><option>Bloccata</option></select></div></div>
  <div class="field"><label>Descrizione</label><textarea name="description"></textarea></div><button>Salva commessa</button></form>`:'<div class="empty">Prima devi creare almeno un cliente.</div>'}</div>`;
 }
-async function addJob(e){
-  e.preventDefault();
-  let f=new FormData(e.target);
-
-  const number=String(f.get('number')||'').trim();
-  const clientId=String(f.get('clientId')||'').trim();
-  const type=String(f.get('type')||'').trim();
-  const address=String(f.get('address')||'').trim();
-  const manager=String(f.get('manager')||'').trim();
-  const status=String(f.get('status')||'Nuova').trim();
-  const description=String(f.get('description')||'').trim();
-
-  if(!number || !clientId){alert('Numero commessa e cliente sono obbligatori.');return}
-
-  const sb=await getGestionaleSupabase();
-  if(!sb){alert('Supabase non disponibile.');return}
-
-  const {data:inserted,error}=await sb.from('commesse').insert({
-    cliente_id:clientId,
-    numero_commessa:number,
-    tipo_lavoro:type,
-    indirizzo_lavori:address || null,
-    responsabile:manager || null,
-    stato:status || 'Nuova',
-    descrizione:description || null
-  }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
-
-  if(error){
-    console.error('Salvataggio commessa Supabase:',error);
-    alert('Errore nel salvataggio della commessa su Supabase: '+(error.message||'verifica le autorizzazioni della tabella commesse.'));
-    return;
-  }
-
-  let j={
-    id:inserted.id,
-    number:inserted.numero_commessa,
-    clientId:inserted.cliente_id,
-    type:inserted.tipo_lavoro,
-    address:inserted.indirizzo_lavori||'',
-    manager:inserted.responsabile||'',
-    status:inserted.stato||'Nuova',
-    description:inserted.descrizione||'',
-    created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),
-    closed:inserted.data_chiusura||'',
-    survey:{},
-    pv:{},
-    practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},
-    tasks:defaultTasks(type),
-    photos:[],
-    documents:[],
-    testing:{},
-    invoices:[]
-  };
-
-  db.jobs.push(j);
-  localStorage.setItem(KEY,JSON.stringify(db));
-  alert('Commessa salvata correttamente su Supabase.');
-  renderAll();
-  openJob(j.id);
-}
+function addJob(e){e.preventDefault();let f=new FormData(e.target);let j={id:id(),number:f.get('number'),clientId:f.get('clientId'),type:f.get('type'),address:f.get('address'),manager:f.get('manager'),status:f.get('status'),description:f.get('description'),created:new Date().toISOString(),survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(f.get('type')),photos:[],documents:[],testing:{},invoices:[]};db.jobs.push(j);save();openJob(j.id)}
 function defaultTasks(type){if(type==='Fotovoltaico')return ['Preparazione area','Montaggio struttura','Installazione moduli','Posa tubazioni','Posa cavi','Installazione inverter','Installazione accumulo','Installazione quadri','Collegamenti elettrici','Prove e verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}));return ['Preparazione','Lavorazione','Verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}))}
 function renderJobs(){
  const el=document.getElementById('jobs');
@@ -628,37 +483,7 @@ function renderJobs(){
 }
 function filterJobs(){let q=(document.getElementById('jobSearch')?.value||'').toLowerCase();let rows=db.jobs.filter(j=>(j.number+' '+clientName(j.clientId)+' '+j.type).toLowerCase().includes(q));document.getElementById('jobTable').innerHTML=rows.length?`<table><tr><th>Numero</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${rows.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun risultato.</div>'}
 function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail')}
-async function jobSave(){
-  if(!currentJob) return;
-  let j=db.jobs.find(x=>x.id===currentJob.id);
-  if(!j) return;
-  Object.assign(j,currentJob);
-  localStorage.setItem(KEY,JSON.stringify(db));
-
-  const uuidRe=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if(!uuidRe.test(String(currentJob.id||''))) return;
-
-  try{
-    const sb=await getGestionaleSupabase();
-    if(!sb) return;
-    const {error}=await sb.from('commesse').update({
-      cliente_id:currentJob.clientId,
-      numero_commessa:currentJob.number,
-      tipo_lavoro:currentJob.type,
-      indirizzo_lavori:currentJob.address||null,
-      responsabile:currentJob.manager||null,
-      stato:currentJob.status||'Nuova',
-      descrizione:currentJob.description||null,
-      data_chiusura:currentJob.closed||null
-    }).eq('id',currentJob.id);
-
-    if(error){
-      console.error('Aggiornamento commessa Supabase:',error);
-    }
-  }catch(e){
-    console.error('jobSave Supabase:',e);
-  }
-}
+function jobSave(){let j=db.jobs.find(x=>x.id===currentJob.id);Object.assign(j,currentJob);save()}
 function renderJobDetail(){
  const j=currentJob;if(!j)return;const el=document.getElementById('jobdetail');
  const tabs=[['overview','Anagrafica'],['survey','Sopralluogo'],['pv','Fotovoltaico'],['practice','Pratica connessione'],['tasks','Lavorazioni'],['photos','Foto'],['docs','Documenti'],['test','Collaudo'],['billing','Fatture']];
@@ -829,7 +654,7 @@ function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJo
 function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup_gestionale_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
 function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.clients||!x.jobs)throw Error();db=x;currentJob=null;save();alert('Backup ripristinato.')}catch{alert('File backup non valido.')}};r.readAsText(file)}
 renderAll();
-loadClientsFromSupabase().then(()=>loadJobsFromSupabase());
+loadClientsFromSupabase();
 </script>
 
 <style>
