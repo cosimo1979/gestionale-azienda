@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gestionale Azienda V2</title>
+<title>Gestionale Azienda V3</title>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--ink:#18212b;--muted:#667381;--line:#dfe4e8;--accent:#1769aa;--ok:#208a55;--warn:#c98300;--bad:#b64040}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 </head>
 <body>
 <header>
-  <h1>Gestionale Azienda — V2</h1>
+  <h1>Gestionale Azienda — V3</h1>
   <div class="top-actions"><button type="button" class="secondary" id="supabaseTestBtn" onclick="testSupabaseConnection()">☁ Test Supabase</button>
     <button onclick="exportData()">Backup</button>
     <label class="btn secondary" style="display:inline-block;color:#26333d">Ripristina <input id="importFile" type="file" accept=".json" hidden onchange="importData(event)"><button type="button" class="secondary camera-pdf"
@@ -90,7 +90,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 #supabaseStatus{position:fixed;left:16px;bottom:62px;z-index:5000;padding:9px 12px;border-radius:8px;background:#fff;border:1px solid #dfe4e8;font:13px Arial;box-shadow:0 2px 8px rgba(0,0,0,.12);display:none}
 </style>
 <script>
-const SUPABASE_URL = "https://heqyihqeacktkwrbnvn.supabase.co";
+const SUPABASE_URL = "https://heqyihqeakctkwwrbnvn.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_8eATgwR26e8oAy28jOxXhQ_ijKEksnh";
 
 async function testSupabaseConnection(){
