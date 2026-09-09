@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gestionale Azienda V5</title>
+<title>Gestionale Azienda V4</title>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--ink:#18212b;--muted:#667381;--line:#dfe4e8;--accent:#1769aa;--ok:#208a55;--warn:#c98300;--bad:#b64040}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 </head>
 <body>
 <header>
-  <h1>Gestionale Azienda — V5</h1>
+  <h1>Gestionale Azienda — V4</h1>
   <div class="top-actions"><button type="button" class="secondary" id="supabaseTestBtn" onclick="testSupabaseConnection()">☁ Test Supabase</button>
     <button onclick="exportData()">Backup</button>
     <label class="btn secondary" style="display:inline-block;color:#26333d">Ripristina <input id="importFile" type="file" accept=".json" hidden onchange="importData(event)"><button type="button" class="secondary camera-pdf"
@@ -479,7 +479,7 @@ async function loadJobsFromSupabase(){
   const sb=await getGestionaleSupabase();
   if(!sb) return;
   try{
-    const {data:cloudRaw,error}=await sb.from('commesse').select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').order('created_at',{ascending:true});
+    const {data:cloudRaw,error}=await sb.from('commessa').select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').order('created_at',{ascending:true});
     if(error){ console.error('loadJobsFromSupabase:',error); return; }
     const cloud=cloudRaw||[];
     // Porta nel cloud eventuali commesse locali non ancora presenti.
@@ -487,16 +487,16 @@ async function loadJobsFromSupabase(){
       const found=cloud.find(c=>String(c.id)===String(localJob.id) || (String(c.numero_commessa||'').trim()===String(localJob.number||'').trim() && String(c.cliente_id||'')===String(localJob.clientId||'')));
       if(found) continue;
       if(!localJob.clientId) continue;
-      const {data:ins,error:insErr}=await sb.from('commesse').insert({
+      const {data:ins,error:insErr}=await sb.from('commessa').insert({
         cliente_id:localJob.clientId,
         numero_commessa:String(localJob.number||'').trim(),
         tipo_lavoro:localJob.type||'Fotovoltaico',
         indirizzo_lavori:localJob.address||null,
         responsabile:localJob.manager||null,
         stato:localJob.status||'Aperta',
-        descrizione:localJob.description||null,
+        "Descrizione":localJob.description||null,
         data_apertura:localJob.created||new Date().toISOString()
-      }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
+      }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').single();
       if(!insErr && ins){ cloud.push(ins); localJob.id=ins.id; }
     }
     db.jobs=cloud.map(c=>{
@@ -504,8 +504,7 @@ async function loadJobsFromSupabase(){
       return {
         id:c.id, number:c.numero_commessa, clientId:c.cliente_id, type:c.tipo_lavoro,
         address:c.indirizzo_lavori||'', manager:c.responsabile||'', status:c.stato||'Aperta',
-        description:c.descrizione||old?.description||'',
-        created:c.data_apertura||c.created_at||new Date().toISOString(),
+        description:c['Descrizione']||'', created:c.data_apertura||c.created_at||new Date().toISOString(),
         closed:c.data_chiusura||'', survey:old?.survey||{}, pv:old?.pv||{},
         practice:old?.practice||{docs:{},files:{},values:{},status:'Documenti da raccogliere'},
         tasks:old?.tasks||defaultTasks(c.tipo_lavoro), photos:old?.photos||[],
@@ -530,14 +529,13 @@ async function addJob(e){
   if(!number || !clientId){alert('Numero commessa e cliente sono obbligatori.');return}
   const sb=await getGestionaleSupabase();
   if(!sb){alert('Supabase non disponibile.');return}
-  const {data:inserted,error}=await sb.from('commesse').insert({
+  const {data:inserted,error}=await sb.from('commessa').insert({
     cliente_id:clientId, numero_commessa:number, tipo_lavoro:type,
     indirizzo_lavori:address||null, responsabile:manager||null,
-    stato:status||'Aperta',
-    descrizione:description||null
-  }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
-  if(error){console.error('Salvataggio commessa Supabase:',error);alert('Errore nel salvataggio della commessa su Supabase: '+(error.message||'verifica la tabella commesse.'));return}
-  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted.descrizione||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],testing:{},invoices:[]};
+    stato:status||'Aperta', "Descrizione":description||null
+  }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').single();
+  if(error){console.error('Salvataggio commessa Supabase:',error);alert('Errore nel salvataggio della commessa su Supabase: '+(error.message||'verifica la tabella commessa.'));return}
+  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted['Descrizione']||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],testing:{},invoices:[]};
   db.jobs.push(j);save();openJob(j.id)
 }
 function defaultTasks(type){if(type==='Fotovoltaico')return ['Preparazione area','Montaggio struttura','Installazione moduli','Posa tubazioni','Posa cavi','Installazione inverter','Installazione accumulo','Installazione quadri','Collegamenti elettrici','Prove e verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}));return ['Preparazione','Lavorazione','Verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}))}
@@ -546,16 +544,16 @@ function renderJobs(){
  el.innerHTML=`<div class="card"><div class="row"><div><h2 style="margin:0">Commesse</h2></div><input id="jobSearch" placeholder="Cerca numero, cliente, tipo..." oninput="filterJobs()"></div><div id="jobTable"></div></div>`;filterJobs()
 }
 function filterJobs(){let q=(document.getElementById('jobSearch')?.value||'').toLowerCase();let rows=db.jobs.filter(j=>(j.number+' '+clientName(j.clientId)+' '+j.type).toLowerCase().includes(q));document.getElementById('jobTable').innerHTML=rows.length?`<table><tr><th>Numero</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${rows.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun risultato.</div>'}
-function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail')}
+function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail');if(currentJob) loadSurveyForJob(currentJob)}
 async function jobSave(){
   let j=db.jobs.find(x=>x.id===currentJob.id);
   if(!j) return;
   Object.assign(j,currentJob); save();
   const sb=await getGestionaleSupabase();
   if(!sb || !j.id) return;
-  const {error}=await sb.from('commesse').update({
+  const {error}=await sb.from('commessa').update({
     numero_commessa:j.number, indirizzo_lavori:j.address||null, responsabile:j.manager||null,
-    stato:j.status||'Aperta', descrizione:j.description||null, data_chiusura:j.closed||null
+    stato:j.status||'Aperta', "Descrizione":j.description||null, data_chiusura:j.closed||null
   }).eq('id',j.id);
   if(error) console.error('Aggiornamento commessa Supabase:',error);
 }
@@ -569,7 +567,7 @@ function inputField(label,path,val,type='text'){return `<div class="field"><labe
 function setPath(el){let p=el.dataset.path.split('.'),o=currentJob;for(let i=0;i<p.length-1;i++){if(!o[p[i]])o[p[i]]={};o=o[p[i]]}o[p[p.length-1]]=el.value;jobSave()}
 function renderTab(j){
  if(currentTab==='overview')return `<div class="grid2">${inputField('Numero commessa','number',j.number)}${inputField('Indirizzo lavori','address',j.address)}${inputField('Responsabile','manager',j.manager)}<div class="field"><label>Stato</label><select onchange="currentJob.status=this.value;jobSave()">${['Aperta','Sopralluogo','Preventivo','Contratto','Acconto','Materiali','Progettazione','Programmazione','Installazione','Collaudo','Fatturazione','Documenti','Chiusa'].map(s=>`<option ${s===j.status?'selected':''}>${s}</option>`).join('')}</select></div></div><div class="field"><label>Descrizione</label><textarea onchange="currentJob.description=this.value;jobSave()">${esc(j.description)}</textarea></div>`;
- if(currentTab==='survey')return `<div class="grid2">${inputField('Data sopralluogo','survey.date',j.survey.date)}${inputField('Tecnico','survey.technician',j.survey.technician)}</div><div class="field"><label>Misure / note sopralluogo</label><textarea onchange="currentJob.survey.notes=this.value;jobSave()">${esc(j.survey.notes)}</textarea></div><div class="field"><label>Foto pre-lavori</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>`;
+ if(currentTab==='survey')return surveyTab(j);
  if(currentTab==='pv')return pvTab(j);
  if(currentTab==='practice')return practiceTab(j);
  if(currentTab==='tasks')return tasksTab(j);
@@ -578,6 +576,85 @@ function renderTab(j){
  if(currentTab==='test')return `<div class="grid2">${inputField('Data collaudo','testing.date',j.testing.date)}${inputField('Tecnico','testing.technician',j.testing.technician)}</div><div class="field"><label>Esito</label><select onchange="j.testing.result=this.value;jobSave()">${['Da eseguire','Positivo','Negativo'].map(s=>`<option ${s===j.testing.result?'selected':''}>${s}</option>`).join('')}</select></div><div class="field"><label>Prove / note</label><textarea onchange="j.testing.notes=this.value;jobSave()">${esc(j.testing.notes)}</textarea></div><div class="field"><label>Verbale collaudo</label><input type="file" multiple onchange="addDocumentFiles(event,'Verbale collaudo')"></div>`;
  if(currentTab==='billing')return `<h3>Fatturazione</h3>${j.invoices.map((x,i)=>`<div class="card"><b>${esc(x.type)}</b> — € ${esc(x.amount)} — ${esc(x.status)}</div>`).join('')}<form onsubmit="addInvoice(event)" class="grid2"><div class="field"><label>Tipo</label><select name="type"><option>Acconto</option><option>SAL</option><option>Finale</option></select></div><div class="field"><label>Importo €</label><input name="amount" type="number" step="0.01"></div><div class="field"><label>Stato</label><select name="status"><option>Da fatturare</option><option>Fatturata</option><option>Pagata</option></select></div></div><button>Aggiungi</button></form>`;
 }
+async function loadSurveyForJob(j){
+  const sb=await getGestionaleSupabase();
+  if(!sb || !j?.id) return;
+  try{
+    const {data,error}=await sb.from('sopralluoghi')
+      .select('id,commessa_id,data_sopralluogo,tecnico_id,note,misure,problemi,created_at')
+      .eq('commessa_id',j.id)
+      .order('created_at',{ascending:false})
+      .limit(1);
+    if(error){console.error('loadSurveyForJob:',error);return;}
+    const row=(data||[])[0];
+    if(row){
+      j.survey={
+        id:row.id,
+        date:row.data_sopralluogo||'',
+        technicianId:row.tecnico_id||'',
+        technician:'',
+        notes:row.note||'',
+        measures:row.misure||'',
+        problems:row.problemi||''
+      };
+      save();
+      if(currentJob?.id===j.id && currentTab==='survey') renderJobDetail();
+    }
+  }catch(e){console.error('loadSurveyForJob:',e)}
+}
+
+async function saveSurvey(){
+  const j=currentJob;
+  if(!j?.id){alert('Commessa non valida.');return}
+  j.survey=j.survey||{};
+  const payload={
+    commessa_id:j.id,
+    data_sopralluogo:j.survey.date||null,
+    tecnico_id:j.survey.technicianId||null,
+    note:j.survey.notes||null,
+    misure:j.survey.measures||null,
+    problemi:j.survey.problems||null
+  };
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  let result;
+  if(j.survey.id){
+    result=await sb.from('sopralluoghi').update(payload).eq('id',j.survey.id).select('id,commessa_id,data_sopralluogo,tecnico_id,note,misure,problemi,created_at').single();
+  }else{
+    result=await sb.from('sopralluoghi').insert(payload).select('id,commessa_id,data_sopralluogo,tecnico_id,note,misure,problemi,created_at').single();
+  }
+  if(result.error){
+    console.error('Salvataggio sopralluogo Supabase:',result.error);
+    alert('Errore nel salvataggio del sopralluogo su Supabase: '+(result.error.message||''));
+    return;
+  }
+  const row=result.data;
+  j.survey.id=row.id;
+  j.survey.date=row.data_sopralluogo||'';
+  j.survey.technicianId=row.tecnico_id||'';
+  j.survey.notes=row.note||'';
+  j.survey.measures=row.misure||'';
+  j.survey.problems=row.problemi||'';
+  save();
+  renderJobDetail();
+  alert('Sopralluogo salvato correttamente su Supabase.');
+}
+
+function surveyTab(j){
+  j.survey=j.survey||{};
+  return `<div class="small muted" style="margin-bottom:12px">Il sopralluogo viene salvato nella tabella Supabase <b>sopralluoghi</b> e collegato automaticamente a questa commessa.</div>
+  <div class="grid2">
+    ${inputField('Data sopralluogo','survey.date',j.survey.date,'date')}
+    <div class="field"><label>Tecnico</label><input value="${esc(j.survey.technician||'')}" placeholder="Tecnico (configurazione utenti successiva)" disabled></div>
+  </div>
+  <div class="field"><label>Misure rilevate</label><textarea onchange="currentJob.survey.measures=this.value">${esc(j.survey.measures||'')}</textarea></div>
+  <div class="field"><label>Note</label><textarea onchange="currentJob.survey.notes=this.value">${esc(j.survey.notes||'')}</textarea></div>
+  <div class="field"><label>Problemi / criticità</label><textarea onchange="currentJob.survey.problems=this.value">${esc(j.survey.problems||'')}</textarea></div>
+  <div class="row" style="align-items:center"><button onclick="saveSurvey()">Salva sopralluogo</button>${j.survey.id?'<span class="small ok">✓ Sopralluogo presente su Supabase</span>':''}</div>
+  <hr style="margin:18px 0;border:0;border-top:1px solid var(--line)">
+  <div class="field"><label>Foto pre-lavori</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>`;
+}
+
 function pvTab(j){j.pv=j.pv||{};return `<h3>Dati impianto</h3><div class="grid2">${inputField('Potenza impianto (kWp)','pv.power',j.pv.power)}${inputField('Numero moduli','pv.modules',j.pv.modules,'number')}${inputField('Marca moduli','pv.moduleBrand',j.pv.moduleBrand)}${inputField('Modello moduli','pv.moduleModel',j.pv.moduleModel)}${inputField('Potenza singolo modulo (W)','pv.modulePower',j.pv.modulePower,'number')}${inputField('Orientamento','pv.orientation',j.pv.orientation)}${inputField('Inclinazione','pv.tilt',j.pv.tilt)}${inputField('Numero stringhe','pv.strings',j.pv.strings,'number')}${inputField('Configurazione stringhe','pv.stringConfig',j.pv.stringConfig)}</div>
  <h3>Inverter</h3><div class="grid2">${inputField('Marca','pv.invBrand',j.pv.invBrand)}${inputField('Modello','pv.invModel',j.pv.invModel)}${inputField('Potenza nominale (kW)','pv.invPower',j.pv.invPower)}${inputField('Numero inverter','pv.invNumber',j.pv.invNumber,'number')}</div>
  <h3>Accumulo</h3><div class="grid2">${inputField('Presente (sì/no)','pv.storage',j.pv.storage)}${inputField('Marca','pv.stBrand',j.pv.stBrand)}${inputField('Modello','pv.stModel',j.pv.stModel)}${inputField('Capacità nominale (kWh)','pv.stCapacity',j.pv.stCapacity)}${inputField('Potenza (kW)','pv.stPower',j.pv.stPower)}${inputField('Numero batterie','pv.stNumber',j.pv.stNumber,'number')}</div>
