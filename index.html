@@ -617,13 +617,38 @@ async function saveQuote(e){
   const notes=String(f.get('notes')||'').trim();
   const file=e.target.querySelector('input[name="pdf"]')?.files?.[0]||null;
   if(!number){alert('Inserisci il numero del preventivo.');return}
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+
+  // Controllo globale del numero preventivo: deve essere unico in tutta l'azienda.
+  const allNumbers=await sb.from('preventivi').select('numero_preventivo').not('numero_preventivo','is',null);
+  if(allNumbers.error){console.error('Controllo numeri preventivo:',allNumbers.error);alert('Errore nel controllo del numero preventivo su Supabase: '+(allNumbers.error.message||''));return}
+  const nums=(allNumbers.data||[]).map(x=>String(x.numero_preventivo||'').trim()).filter(Boolean);
+  const exists=nums.some(x=>x.toLowerCase()===number.toLowerCase());
+  if(exists){
+    // Suggerisce il primo numero successivo realmente libero, mantenendo prefisso e zeri iniziali quando possibile.
+    let suggestion='';
+    const m=number.match(/^(.*?)(\d+)$/);
+    if(m){
+      const prefix=m[1], digits=m[2];
+      let n=parseInt(digits,10)+1;
+      do { suggestion=prefix+String(n).padStart(digits.length,'0'); n++; }
+      while(nums.some(x=>x.toLowerCase()===suggestion.toLowerCase()));
+    }else{
+      let n=1;
+      do { suggestion=String(n); n++; }
+      while(nums.some(x=>x.toLowerCase()===suggestion.toLowerCase()));
+    }
+    alert('Numero preventivo già esistente.\n\nNumero successivo disponibile: '+suggestion);
+    const numInput=e.target.querySelector('input[name=\"number\"]');
+    if(numInput && suggestion){numInput.value=suggestion;numInput.focus();numInput.select();}
+    return;
+  }
   if(amount!=='' && (isNaN(Number(amount)) || Number(amount)<0)){alert('Inserisci un importo valido.');return}
   if(advanceRequested!=='' && (isNaN(Number(advanceRequested)) || Number(advanceRequested)<0)){alert('Inserisci un acconto richiesto valido.');return}
   if(advanceReceived!=='' && (isNaN(Number(advanceReceived)) || Number(advanceReceived)<0)){alert('Inserisci un acconto ricevuto valido.');return}
   if(accepted && !acceptanceDate){alert('Inserisci la data di accettazione.');return}
   if(contractSigned && !signatureDate){alert('Inserisci la data di firma del contratto.');return}
-  const sb=await getGestionaleSupabase();
-  if(!sb){alert('Supabase non disponibile.');return}
   let pdfUrl='';
   try{
     if(file){
