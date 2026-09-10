@@ -908,7 +908,7 @@ function photosTab(j){
   j.photos=j.photos||[];
   const pre=j.photos.filter(p=>(p.phase||'').toLowerCase()==='pre-lavori');
   const other=j.photos.filter(p=>(p.phase||'').toLowerCase()!=='pre-lavori');
-  const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt="" title="Apri foto" onclick="openPhoto('${String(p.url||p.data||'').replace(/'/g,\"\\'\")}')"><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
+  const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt="" title="Apri foto" onclick="openPhoto(this.src)"><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
   return `<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>${pre.length?`<div class="photo-grid">${pre.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna foto pre-lavori.</div>'}</div>
   <div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${other.length?`<div class="photo-grid">${other.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna altra foto.</div>'}</div>`;
 }
