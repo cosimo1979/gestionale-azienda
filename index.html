@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gestionale Azienda V5</title>
+<title>Gestionale Azienda V5.4</title>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--ink:#18212b;--muted:#667381;--line:#dfe4e8;--accent:#1769aa;--ok:#208a55;--warn:#c98300;--bad:#b64040}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
@@ -583,14 +583,17 @@ async function loadQuotesForJob(j){
   if(!sb || !j?.id) return;
   try{
     const {data,error}=await sb.from('preventivi')
-      .select('id,commessa_id,numero_preventivo,data_preventivo,importo,stato,pdf_preventivo,created_at,updated_at')
+      .select('id,commessa_id,numero_preventivo,data_preventivo,importo,accettato,data_accettazione,contratto_firmato,data_firma,acconto_richiesto,acconto_ricevuto,note,pdf_preventivo,created_at')
       .eq('commessa_id',j.id)
       .order('data_preventivo',{ascending:false,nullsFirst:false})
       .order('created_at',{ascending:false});
     if(error){console.error('loadQuotesForJob:',error);return;}
     j.quotes=(data||[]).map(x=>({
       id:x.id, number:x.numero_preventivo||'', date:x.data_preventivo||'', amount:x.importo??'',
-      status:x.stato||'Da preparare', pdf:x.pdf_preventivo||'', created:x.created_at||''
+      accepted:!!x.accettato, acceptanceDate:x.data_accettazione||'',
+      contractSigned:!!x.contratto_firmato, signatureDate:x.data_firma||'',
+      advanceRequested:x.acconto_richiesto??'', advanceReceived:x.acconto_ricevuto??'',
+      notes:x.note||'', pdf:x.pdf_preventivo||'', created:x.created_at||''
     }));
     save();
     if(currentJob?.id===j.id && currentTab==='quote') renderJobDetail();
@@ -605,24 +608,47 @@ async function saveQuote(e){
   const number=String(f.get('number')||'').trim();
   const date=String(f.get('date')||'').trim();
   const amount=String(f.get('amount')||'').trim();
-  const status=String(f.get('status')||'Da preparare').trim();
+  const accepted=f.get('accepted')==='on';
+  const acceptanceDate=String(f.get('acceptanceDate')||'').trim();
+  const contractSigned=f.get('contractSigned')==='on';
+  const signatureDate=String(f.get('signatureDate')||'').trim();
+  const advanceRequested=String(f.get('advanceRequested')||'').trim();
+  const advanceReceived=String(f.get('advanceReceived')||'').trim();
+  const notes=String(f.get('notes')||'').trim();
   const file=e.target.querySelector('input[name="pdf"]')?.files?.[0]||null;
   if(!number){alert('Inserisci il numero del preventivo.');return}
   if(amount!=='' && (isNaN(Number(amount)) || Number(amount)<0)){alert('Inserisci un importo valido.');return}
+  if(advanceRequested!=='' && (isNaN(Number(advanceRequested)) || Number(advanceRequested)<0)){alert('Inserisci un acconto richiesto valido.');return}
+  if(advanceReceived!=='' && (isNaN(Number(advanceReceived)) || Number(advanceReceived)<0)){alert('Inserisci un acconto ricevuto valido.');return}
+  if(accepted && !acceptanceDate){alert('Inserisci la data di accettazione.');return}
+  if(contractSigned && !signatureDate){alert('Inserisci la data di firma del contratto.');return}
   const sb=await getGestionaleSupabase();
   if(!sb){alert('Supabase non disponibile.');return}
   let pdfUrl='';
   try{
     if(file){
       if(file.type!=='application/pdf'){alert('Il preventivo deve essere un PDF.');return}
-      const safe=(file.name||'preventivo.pdf').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_');
+      const safe=(file.name||'preventivo.pdf').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_');
       const path=`commesse/${j.id}/preventivi/${Date.now()}_${safe}`;
       const {error:upErr}=await sb.storage.from('foto-commesse').upload(path,file,{contentType:'application/pdf',upsert:false});
       if(upErr) throw upErr;
       pdfUrl=sb.storage.from('foto-commesse').getPublicUrl(path).data?.publicUrl||'';
     }
-    const payload={commessa_id:j.id,numero_preventivo:number,data_preventivo:date||null,importo:amount===''?null:Number(amount),stato:status,pdf_preventivo:pdfUrl||null};
-    const {data,error}=await sb.from('preventivi').insert(payload).select('id,commessa_id,numero_preventivo,data_preventivo,importo,stato,pdf_preventivo,created_at,updated_at').single();
+    const payload={
+      commessa_id:j.id,
+      numero_preventivo:number,
+      data_preventivo:date||null,
+      importo:amount===''?null:Number(amount),
+      accettato:accepted,
+      data_accettazione:accepted?(acceptanceDate||null):null,
+      contratto_firmato:contractSigned,
+      data_firma:contractSigned?(signatureDate||null):null,
+      acconto_richiesto:advanceRequested===''?null:Number(advanceRequested),
+      acconto_ricevuto:advanceReceived===''?null:Number(advanceReceived),
+      note:notes||null,
+      pdf_preventivo:pdfUrl||null
+    };
+    const {data,error}=await sb.from('preventivi').insert(payload).select('id,commessa_id,numero_preventivo,data_preventivo,importo,accettato,data_accettazione,contratto_firmato,data_firma,acconto_richiesto,acconto_ricevuto,note,pdf_preventivo,created_at').single();
     if(error){
       if(pdfUrl){
         const marker='/storage/v1/object/public/foto-commesse/';
@@ -632,7 +658,12 @@ async function saveQuote(e){
       throw error;
     }
     j.quotes=j.quotes||[];
-    j.quotes.unshift({id:data.id,number:data.numero_preventivo||'',date:data.data_preventivo||'',amount:data.importo??'',status:data.stato||status,pdf:data.pdf_preventivo||'',created:data.created_at||''});
+    j.quotes.unshift({
+      id:data.id,number:data.numero_preventivo||'',date:data.data_preventivo||'',amount:data.importo??'',
+      accepted:!!data.accettato,acceptanceDate:data.data_accettazione||'',contractSigned:!!data.contratto_firmato,
+      signatureDate:data.data_firma||'',advanceRequested:data.acconto_richiesto??'',advanceReceived:data.acconto_ricevuto??'',
+      notes:data.note||'',pdf:data.pdf_preventivo||'',created:data.created_at||''
+    });
     save();
     renderJobDetail();
     alert('Preventivo salvato correttamente su Supabase.');
@@ -659,14 +690,23 @@ async function deleteQuote(id){
 
 function quoteTab(j){
   j.quotes=j.quotes||[];
-  const rows=j.quotes.map(q=>`<div class="card" style="margin-bottom:10px"><div class="row"><div><b>Preventivo ${esc(q.number||'')}</b><br><span class="small muted">${q.date?new Date(q.date+'T00:00:00').toLocaleDateString('it-IT'):'Data non indicata'} · ${q.amount!==''&&q.amount!=null?'€ '+Number(q.amount).toLocaleString('it-IT',{minimumFractionDigits:2}):'Importo non indicato'}</span></div><div><span class="badge">${esc(q.status||'Da preparare')}</span></div></div>${q.pdf?`<div style="margin-top:8px"><a href="${esc(q.pdf)}" target="_blank" rel="noopener">📄 Apri PDF preventivo</a></div>`:''}<div style="margin-top:10px"><button class="danger" onclick="deleteQuote('${String(q.id).replace(/'/g,"\\'")}')">Elimina</button></div></div>`).join('');
-  return `<div class="small muted" style="margin-bottom:12px">Qui registriamo i preventivi della commessa. È possibile avere più versioni dello stesso preventivo.</div>
+  const rows=j.quotes.map(q=>`<div class="card" style="margin-bottom:10px"><div class="row"><div><b>Preventivo ${esc(q.number||'')}</b><br><span class="small muted">${q.date?new Date(q.date+'T00:00:00').toLocaleDateString('it-IT'):'Data non indicata'} · ${q.amount!==''&&q.amount!=null?'€ '+Number(q.amount).toLocaleString('it-IT',{minimumFractionDigits:2}):'Importo non indicato'}</span></div><div><span class="badge">${q.accepted?'Accettato':'Da preparare'}</span></div></div>
+  <div class="small" style="margin-top:8px">${q.accepted?`Accettato il ${q.acceptanceDate?new Date(q.acceptanceDate+'T00:00:00').toLocaleDateString('it-IT'):'data non indicata'}`:'Non accettato'} · ${q.contractSigned?'Contratto firmato':'Contratto non firmato'}</div>
+  <div class="small" style="margin-top:4px">Acconto richiesto: ${q.advanceRequested!==''&&q.advanceRequested!=null?'€ '+Number(q.advanceRequested).toLocaleString('it-IT',{minimumFractionDigits:2}):'—'} · Ricevuto: ${q.advanceReceived!==''&&q.advanceReceived!=null?'€ '+Number(q.advanceReceived).toLocaleString('it-IT',{minimumFractionDigits:2}):'—'}</div>
+  ${q.notes?`<div class="small" style="margin-top:4px">Note: ${esc(q.notes)}</div>`:''}
+  ${q.pdf?`<div style="margin-top:8px"><a href="${esc(q.pdf)}" target="_blank" rel="noopener">📄 Apri PDF preventivo</a></div>`:''}
+  <div style="margin-top:10px"><button class="danger" onclick="deleteQuote('${String(q.id).replace(/'/g,"\\'")}')">Elimina</button></div></div>`).join('');
+  return `<div class="small muted" style="margin-bottom:12px">Qui registriamo il preventivo, la sua accettazione, il contratto e l'acconto della commessa.</div>
   ${rows||'<div class="empty">Nessun preventivo registrato.</div>'}
   <div class="card"><h3>Nuovo preventivo</h3><form onsubmit="saveQuote(event)">
     <div class="grid2"><div class="field"><label>Numero preventivo *</label><input name="number" required placeholder="es. PREV-001"></div><div class="field"><label>Data preventivo</label><input name="date" type="date"></div>
     <div class="field"><label>Importo €</label><input name="amount" type="number" min="0" step="0.01" placeholder="0,00"></div>
-    <div class="field"><label>Stato</label><select name="status">${['Da preparare','Inviato','Accettato','Rifiutato'].map(x=>`<option>${x}</option>`).join('')}</select></div></div>
-    <div class="field"><label>PDF preventivo</label><input name="pdf" type="file" accept="application/pdf"></div>
+    <div class="field"><label>PDF preventivo</label><input name="pdf" type="file" accept="application/pdf"></div></div>
+    <hr style="border:0;border-top:1px solid #ddd;margin:14px 0">
+    <div class="grid2"><div class="field"><label><input name="accepted" type="checkbox"> Preventivo accettato</label></div><div class="field"><label>Data accettazione</label><input name="acceptanceDate" type="date"></div>
+    <div class="field"><label><input name="contractSigned" type="checkbox"> Contratto firmato</label></div><div class="field"><label>Data firma</label><input name="signatureDate" type="date"></div>
+    <div class="field"><label>Acconto richiesto €</label><input name="advanceRequested" type="number" min="0" step="0.01" placeholder="0,00"></div><div class="field"><label>Acconto ricevuto €</label><input name="advanceReceived" type="number" min="0" step="0.01" placeholder="0,00"></div></div>
+    <div class="field"><label>Note</label><textarea name="notes" placeholder="Note sul preventivo, contratto o acconto"></textarea></div>
     <button type="submit">Salva preventivo</button>
   </form></div>`;
 }
