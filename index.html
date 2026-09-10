@@ -494,7 +494,7 @@ async function loadJobsFromSupabase(){
         indirizzo_lavori:localJob.address||null,
         responsabile:localJob.manager||null,
         stato:localJob.status||'Aperta',
-        "Descrizione":localJob.description||null,
+        descrizione:localJob.description||null,
         data_apertura:localJob.created||new Date().toISOString()
       }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
       if(!insErr && ins){ cloud.push(ins); localJob.id=ins.id; }
@@ -651,7 +651,7 @@ function surveyTab(j){
   <div class="field"><label>Note</label><textarea onchange="currentJob.survey.notes=this.value">${esc(j.survey.notes||'')}</textarea></div>
   <div class="field"><label>Problemi / criticità</label><textarea onchange="currentJob.survey.problems=this.value">${esc(j.survey.problems||'')}</textarea></div>
   <div class="row" style="align-items:center"><button onclick="saveSurvey()">Salva sopralluogo</button>${j.survey.id?'<span class="small ok">✓ Sopralluogo presente su Supabase</span>':''}</div>
-  <hr style="margin:18px 0;border:0;border-top:1px solid var(--line)">
+  <hr style="margin:18px 0;border:0;border-top:1px solid var(--line)">  <div class="field"><label>Foto pre-lavori</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>
   <div class="field"><label>Foto pre-lavori</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>`;
 }
 
@@ -800,104 +800,71 @@ function tasksTab(j){return `<h3>Attività</h3>${j.tasks.map(t=>`<div class="car
 function addTask(){let n=prompt('Nome attività');if(n){currentJob.tasks.push({id:id(),name:n,status:'Da fare',note:''});jobSave()}}
 async function loadPhotosForJob(j){
   const sb=await getGestionaleSupabase();
-  if(!sb || !j?.id) return;
+  if(!sb || !j || !j.id) return;
   try{
-    const {data,error}=await sb.from('foto')
-      .select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note')
-      .eq('commessa_id',j.id)
-      .order('data_foto',{ascending:false});
-    if(error){console.error('loadPhotosForJob:',error);return;}
-    const cloud=(data||[]).map(x=>({
-      id:x.id, phase:x.fase||'Generale', name:x.nome_file||'Foto',
-      date:x.data_foto||new Date().toISOString(), url:x.percorso_file||'',
-      note:x.note||'', cloud:true
-    }));
+    const res=await sb.from('foto').select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note').eq('commessa_id',j.id).order('data_foto',{ascending:false});
+    if(res.error){console.error('loadPhotosForJob:',res.error);return;}
+    const cloud=(res.data||[]).map(x=>({id:x.id,phase:x.fase||'Generale',name:x.nome_file||'Foto',date:x.data_foto||new Date().toISOString(),url:x.percorso_file||'',note:x.note||'',cloud:true}));
     const localOnly=(j.photos||[]).filter(p=>!p.cloud && p.data);
-    j.photos=[...cloud,...localOnly];
-    save();
-    if(currentJob?.id===j.id && currentTab==='photos') renderJobDetail();
+    j.photos=cloud.concat(localOnly);
+    localStorage.setItem(KEY,JSON.stringify(db));
+    if(currentJob && currentJob.id===j.id && currentTab==='photos') renderJobDetail();
   }catch(e){console.error('loadPhotosForJob:',e)}
 }
-
 function photoPathName(job,phase,file){
   const cleanName=(file.name||'foto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_');
   const cleanPhase=(phase||'generale').toLowerCase().replace(/[^a-z0-9_-]+/g,'-');
-  return `commesse/${job.id}/${cleanPhase}/${Date.now()}_${Math.random().toString(36).slice(2,8)}_${cleanName}`;
+  return 'commesse/'+job.id+'/'+cleanPhase+'/'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'_'+cleanName;
 }
-
 async function addPhotoFiles(e,phase){
-  const files=[...e.target.files];
-  e.target.value='';
-  if(!files.length || !currentJob?.id) return;
+  const files=Array.from(e.target.files||[]); e.target.value='';
+  if(!files.length || !currentJob || !currentJob.id) return;
   const sb=await getGestionaleSupabase();
   if(!sb){alert('Supabase non disponibile.');return}
-  currentJob.photos=currentJob.photos||[];
-  let uploaded=0;
+  currentJob.photos=currentJob.photos||[]; let uploaded=0;
   for(const file of files){
-    if(!file.type.startsWith('image/')){alert('Puoi caricare solo immagini.');continue}
+    if(!file.type || file.type.indexOf('image/')!==0){alert('Puoi caricare solo immagini.');continue}
     try{
       const path=photoPathName(currentJob,phase,file);
-      const {error:uploadError}=await sb.storage.from('foto-commesse').upload(path,file,{contentType:file.type,upsert:false});
-      if(uploadError) throw uploadError;
-      const {data:urlData}=sb.storage.from('foto-commesse').getPublicUrl(path);
-      const {data:row,error:insertError}=await sb.from('foto').insert({
-        commessa_id:currentJob.id,
-        fase:phase||'Generale',
-        operatore_id:null,
-        nome_file:file.name,
-        percorso_file:urlData?.publicUrl||'',
-        data_foto:new Date().toISOString(),
-        note:null
-      }).select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note').single();
-      if(insertError){
-        await sb.storage.from('foto-commesse').remove([path]);
-        throw insertError;
-      }
-      currentJob.photos.unshift({
-        id:row.id,phase:row.fase||phase,name:row.nome_file||file.name,
-        date:row.data_foto||new Date().toISOString(),url:row.percorso_file||urlData?.publicUrl||'',cloud:true
-      });
+      const up=await sb.storage.from('foto-commesse').upload(path,file,{contentType:file.type,upsert:false});
+      if(up.error) throw up.error;
+      const pub=sb.storage.from('foto-commesse').getPublicUrl(path);
+      const ins=await sb.from('foto').insert({commessa_id:currentJob.id,fase:phase||'Generale',operatore_id:null,nome_file:file.name,percorso_file:(pub.data&&pub.data.publicUrl)||'',data_foto:new Date().toISOString(),note:null}).select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note').single();
+      if(ins.error){await sb.storage.from('foto-commesse').remove([path]);throw ins.error;}
+      const row=ins.data;
+      currentJob.photos.unshift({id:row.id,phase:row.fase||phase,name:row.nome_file||file.name,date:row.data_foto||new Date().toISOString(),url:row.percorso_file||((pub.data&&pub.data.publicUrl)||''),cloud:true});
       uploaded++;
-    }catch(err){
-      console.error('Caricamento foto:',err);
-      alert(`Errore nel caricamento della foto "${file.name}": ${err.message||'operazione non riuscita'}`);
-    }
+    }catch(err){console.error('Caricamento foto:',err);alert('Errore nel caricamento della foto "'+file.name+'": '+(err.message||'operazione non riuscita'));}
   }
-  save();
-  renderJobDetail();
-  if(uploaded) alert(`${uploaded} foto caricata${uploaded===1?'':'e'} correttamente su Supabase.`);
+  localStorage.setItem(KEY,JSON.stringify(db)); renderJobDetail();
+  if(uploaded) alert(uploaded+' foto caricata'+(uploaded===1?'':'e')+' correttamente su Supabase.');
 }
-
 async function deletePhoto(photoId){
-  const p=(currentJob?.photos||[]).find(x=>String(x.id)===String(photoId));
-  if(!p) return;
-  if(!confirm('Eliminare questa foto?')) return;
-  const sb=await getGestionaleSupabase();
-  if(!sb){alert('Supabase non disponibile.');return}
+  const p=(currentJob && currentJob.photos||[]).find(x=>String(x.id)===String(photoId));
+  if(!p) return; if(!confirm('Eliminare questa foto?')) return;
+  const sb=await getGestionaleSupabase(); if(!sb){alert('Supabase non disponibile.');return}
   if(p.cloud){
-    let path='';
-    try{
-      const marker='/storage/v1/object/public/foto-commesse/';
-      const idx=(p.url||'').indexOf(marker);
-      if(idx>=0) path=decodeURIComponent(p.url.slice(idx+marker.length));
-    }catch{}
-    const {error:dbError}=await sb.from('foto').delete().eq('id',p.id);
-    if(dbError){console.error(dbError);alert('Errore nell’eliminazione della foto: '+(dbError.message||''));return}
+    let path=''; const marker='/storage/v1/object/public/foto-commesse/'; const idx=(p.url||'').indexOf(marker);
+    if(idx>=0) path=decodeURIComponent(p.url.slice(idx+marker.length));
+    const dbres=await sb.from('foto').delete().eq('id',p.id);
+    if(dbres.error){alert('Errore nell’eliminazione della foto: '+(dbres.error.message||''));return}
     if(path) await sb.storage.from('foto-commesse').remove([path]);
   }
-  currentJob.photos=currentJob.photos.filter(x=>String(x.id)!==String(photoId));
-  save();
-  renderJobDetail();
+  currentJob.photos=(currentJob.photos||[]).filter(x=>String(x.id)!==String(photoId));
+  localStorage.setItem(KEY,JSON.stringify(db)); renderJobDetail();
 }
-
 function photosTab(j){
   j.photos=j.photos||[];
-  const pre=j.photos.filter(p=>(p.phase||'').toLowerCase()==='pre-lavori');
-  const other=j.photos.filter(p=>(p.phase||'').toLowerCase()!=='pre-lavori');
-  const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt=""><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
-  return `<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>${pre.length?`<div class="photo-grid">${pre.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna foto pre-lavori.</div>'}</div>
-  <div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${other.length?`<div class="photo-grid">${other.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna altra foto.</div>'}</div>`;
-}`}
+  const pre=j.photos.filter(p=>String(p.phase||'').toLowerCase()==='pre-lavori');
+  const other=j.photos.filter(p=>String(p.phase||'').toLowerCase()!=='pre-lavori');
+  function card(p){
+    return '<div><img src="'+esc(p.url||p.data||'')+'" alt=""><div class="small">'+esc(p.phase||'Generale')+'<br>'+new Date(p.date).toLocaleString('it-IT')+'</div><button class="danger" onclick="deletePhoto(\''+String(p.id).replace(/'/g,"\\'")+'\')">Elimina</button></div>';
+  }
+  return '<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,\'pre-lavori\')"></div>'+
+    (pre.length?'<div class="photo-grid">'+pre.map(card).join('')+'</div>':'<div class="empty">Nessuna foto pre-lavori.</div>')+
+    '</div><div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,\'generale\')"></div>'+
+    (other.length?'<div class="photo-grid">'+other.map(card).join('')+'</div>':'<div class="empty">Nessuna altra foto.</div>')+'</div>';
+}
 function addDocumentFiles(e,label){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.documents.push({id:id(),label,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
 function docsTab(j){return `<div class="field"><label>Carica documento</label><input type="file" multiple onchange="addDocumentFiles(event,'Documento commessa')"></div>${j.documents.length?`<table><tr><th>Categoria</th><th>File</th><th>Data</th><th></th></tr>${j.documents.map(d=>`<tr><td>${esc(d.label)}</td><td><a href="${d.data}" download="${esc(d.name)}">${esc(d.name)}</a></td><td>${new Date(d.date).toLocaleString('it-IT')}</td><td><button class="danger" onclick="currentJob.documents=currentJob.documents.filter(x=>x.id!=='${d.id}');jobSave()">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun documento.</div>'}`}
 function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
@@ -1113,29 +1080,3 @@ async function installGestionale(){
 </script>
 <button id="installAppBtn" type="button" onclick="installGestionale()">📱 Installa app</button></body>
 </html>
-<script>
-function appendTechnicalVerification(){
-  try{
-    const j = (typeof currentJob !== 'undefined' && currentJob) ? currentJob : null;
-    if(!j) return;
-    const type = j.type || '';
-    if(!TECH_SECTIONS[type]) return;
-    const existing = document.getElementById('v26-tech-verification');
-    if(existing) existing.remove();
-
-    // Find the main visible job detail area.
-    const candidates = Array.from(document.querySelectorAll('.card, main, #app, body'));
-    let target = candidates.find(el => el.querySelector && el.querySelector('h2,h1') && /commessa|dettaglio/i.test(el.innerText||''));
-    if(!target) target = document.querySelector('main') || document.body;
-
-    const wrap=document.createElement('div');
-    wrap.id='v26-tech-verification';
-    wrap.innerHTML=technicalVerificationHtml(j);
-    target.appendChild(wrap);
-  }catch(e){console.error(e)}
-}
-const _renderCurrentJob0 = window.renderCurrentJob;
-if(typeof _renderCurrentJob0==='function'){
-  window.renderCurrentJob=function(){ _renderCurrentJob0(); setTimeout(appendTechnicalVerification,0); };
-}
-</script>
