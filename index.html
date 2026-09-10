@@ -899,9 +899,24 @@ function photosTab(j){
   const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt=""><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
   return `<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>${pre.length?`<div class="photo-grid">${pre.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna foto pre-lavori.</div>'}</div>
   <div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${other.length?`<div class="photo-grid">${other.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna altra foto.</div>'}</div>`;
-}`}
+}
 function addDocumentFiles(e,label){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.documents.push({id:id(),label,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
-function docsTab(j){return `<div class="field"><label>Carica documento</label><input type="file" multiple onchange="addDocumentFiles(event,'Documento commessa')"></div>${j.documents.length?`<table><tr><th>Categoria</th><th>File</th><th>Data</th><th></th></tr>${j.documents.map(d=>`<tr><td>${esc(d.label)}</td><td><a href="${d.data}" download="${esc(d.name)}">${esc(d.name)}</a></td><td>${new Date(d.date).toLocaleString('it-IT')}</td><td><button class="danger" onclick="currentJob.documents=currentJob.documents.filter(x=>x.id!=='${d.id}');jobSave()">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun documento.</div>'}`}
+function deleteDocument(docId){
+  if(!currentJob) return;
+  currentJob.documents=(currentJob.documents||[]).filter(x=>String(x.id)!==String(docId));
+  jobSave();
+}
+function docsTab(j){
+  j.documents=j.documents||[];
+  let html='<div class="field"><label>Carica documento</label><input type="file" multiple onchange="addDocumentFiles(event,\'Documento commessa\')"></div>';
+  if(!j.documents.length) return html+'<div class="empty">Nessun documento.</div>';
+  html+='<table><tr><th>Categoria</th><th>File</th><th>Data</th><th></th></tr>';
+  j.documents.forEach(d=>{
+    html+='<tr><td>'+esc(d.label||'Documento')+'</td><td><a href="'+(d.data||'')+'" download="'+esc(d.name||'documento')+'">'+esc(d.name||'documento')+'</a></td><td>'+new Date(d.date||Date.now()).toLocaleString('it-IT')+'</td><td><button class="danger" onclick="deleteDocument(\''+String(d.id).replace(/'/g,"\\'")+'\')">Elimina</button></td></tr>';
+  });
+  return html+'</table>';
+}
+
 function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
 function exportData(){let blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='backup_gestionale_'+new Date().toISOString().slice(0,10)+'.json';a.click()}
 function importData(e){let file=e.target.files[0];if(!file)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.clients||!x.jobs)throw Error();db=x;currentJob=null;save();alert('Backup ripristinato.')}catch{alert('File backup non valido.')}};r.readAsText(file)}
