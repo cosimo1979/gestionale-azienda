@@ -509,7 +509,7 @@ async function loadJobsFromSupabase(){
         closed:c.data_chiusura||'', survey:old?.survey||{}, pv:old?.pv||{},
         practice:old?.practice||{docs:{},files:{},values:{},status:'Documenti da raccogliere'},
         tasks:old?.tasks||defaultTasks(c.tipo_lavoro), photos:old?.photos||[],
-        documents:old?.documents||[], testing:old?.testing||{}, invoices:old?.invoices||[]
+        documents:old?.documents||[], quotes:old?.quotes||[], testing:old?.testing||{}, invoices:old?.invoices||[]
       };
     });
     save();
@@ -536,7 +536,7 @@ async function addJob(e){
     stato:status||'Aperta', "Descrizione":description||null
   }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').single();
   if(error){console.error('Salvataggio commessa Supabase:',error);alert('Errore nel salvataggio della commessa su Supabase: '+(error.message||'verifica la tabella commessa.'));return}
-  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted['Descrizione']||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],testing:{},invoices:[]};
+  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted['Descrizione']||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],quotes:[],testing:{},invoices:[]};
   db.jobs.push(j);save();openJob(j.id)
 }
 function defaultTasks(type){if(type==='Fotovoltaico')return ['Preparazione area','Montaggio struttura','Installazione moduli','Posa tubazioni','Posa cavi','Installazione inverter','Installazione accumulo','Installazione quadri','Collegamenti elettrici','Prove e verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}));return ['Preparazione','Lavorazione','Verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}))}
@@ -545,7 +545,7 @@ function renderJobs(){
  el.innerHTML=`<div class="card"><div class="row"><div><h2 style="margin:0">Commesse</h2></div><input id="jobSearch" placeholder="Cerca numero, cliente, tipo..." oninput="filterJobs()"></div><div id="jobTable"></div></div>`;filterJobs()
 }
 function filterJobs(){let q=(document.getElementById('jobSearch')?.value||'').toLowerCase();let rows=db.jobs.filter(j=>(j.number+' '+clientName(j.clientId)+' '+j.type).toLowerCase().includes(q));document.getElementById('jobTable').innerHTML=rows.length?`<table><tr><th>Numero</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${rows.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun risultato.</div>'}
-function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail');if(currentJob){loadSurveyForJob(currentJob);loadPhotosForJob(currentJob)}}
+function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail');if(currentJob){loadSurveyForJob(currentJob);loadPhotosForJob(currentJob);loadQuotesForJob(currentJob)}}
 async function jobSave(){
   let j=db.jobs.find(x=>x.id===currentJob.id);
   if(!j) return;
@@ -560,7 +560,7 @@ async function jobSave(){
 }
 function renderJobDetail(){
  const j=currentJob;if(!j)return;const el=document.getElementById('jobdetail');
- const tabs=[['overview','Anagrafica'],['survey','Sopralluogo'],['pv','Fotovoltaico'],['practice','Pratica connessione'],['tasks','Lavorazioni'],['photos','Foto'],['docs','Documenti'],['test','Collaudo'],['billing','Fatture']];
+ const tabs=[['overview','Anagrafica'],['survey','Sopralluogo'],['pv','Fotovoltaico'],['practice','Pratica connessione'],['quote','Preventivo'],['tasks','Lavorazioni'],['photos','Foto'],['docs','Documenti'],['test','Collaudo'],['billing','Fatture']];
  el.innerHTML=`<div class="card"><div class="row"><div><h2>${esc(j.number)} — ${esc(clientName(j.clientId))}</h2><div class="muted">${esc(j.type)} · ${badge(j.status)}</div></div><div><button class="secondary" onclick="showView('jobs')">← Commesse</button></div></div></div>
  <div class="tabs">${tabs.map(t=>`<button class="${currentTab===t[0]?'active':''}" onclick="currentTab='${t[0]}';renderJobDetail()">${t[1]}</button>`).join('')}</div><div class="card">${renderTab(j)}</div>`;
 }
@@ -571,12 +571,106 @@ function renderTab(j){
  if(currentTab==='survey')return surveyTab(j);
  if(currentTab==='pv')return pvTab(j);
  if(currentTab==='practice')return practiceTab(j);
+ if(currentTab==='quote')return quoteTab(j);
  if(currentTab==='tasks')return tasksTab(j);
  if(currentTab==='photos')return photosTab(j);
  if(currentTab==='docs')return docsTab(j);
  if(currentTab==='test')return `<div class="grid2">${inputField('Data collaudo','testing.date',j.testing.date)}${inputField('Tecnico','testing.technician',j.testing.technician)}</div><div class="field"><label>Esito</label><select onchange="j.testing.result=this.value;jobSave()">${['Da eseguire','Positivo','Negativo'].map(s=>`<option ${s===j.testing.result?'selected':''}>${s}</option>`).join('')}</select></div><div class="field"><label>Prove / note</label><textarea onchange="j.testing.notes=this.value;jobSave()">${esc(j.testing.notes)}</textarea></div><div class="field"><label>Verbale collaudo</label><input type="file" multiple onchange="addDocumentFiles(event,'Verbale collaudo')"></div>`;
  if(currentTab==='billing')return `<h3>Fatturazione</h3>${j.invoices.map((x,i)=>`<div class="card"><b>${esc(x.type)}</b> — € ${esc(x.amount)} — ${esc(x.status)}</div>`).join('')}<form onsubmit="addInvoice(event)" class="grid2"><div class="field"><label>Tipo</label><select name="type"><option>Acconto</option><option>SAL</option><option>Finale</option></select></div><div class="field"><label>Importo €</label><input name="amount" type="number" step="0.01"></div><div class="field"><label>Stato</label><select name="status"><option>Da fatturare</option><option>Fatturata</option><option>Pagata</option></select></div></div><button>Aggiungi</button></form>`;
 }
+async function loadQuotesForJob(j){
+  const sb=await getGestionaleSupabase();
+  if(!sb || !j?.id) return;
+  try{
+    const {data,error}=await sb.from('preventivi')
+      .select('id,commessa_id,numero_preventivo,data_preventivo,importo,stato,pdf_preventivo,created_at,updated_at')
+      .eq('commessa_id',j.id)
+      .order('data_preventivo',{ascending:false,nullsFirst:false})
+      .order('created_at',{ascending:false});
+    if(error){console.error('loadQuotesForJob:',error);return;}
+    j.quotes=(data||[]).map(x=>({
+      id:x.id, number:x.numero_preventivo||'', date:x.data_preventivo||'', amount:x.importo??'',
+      status:x.stato||'Da preparare', pdf:x.pdf_preventivo||'', created:x.created_at||''
+    }));
+    save();
+    if(currentJob?.id===j.id && currentTab==='quote') renderJobDetail();
+  }catch(e){console.error('loadQuotesForJob:',e)}
+}
+
+async function saveQuote(e){
+  e.preventDefault();
+  const j=currentJob;
+  if(!j?.id){alert('Commessa non valida.');return}
+  const f=new FormData(e.target);
+  const number=String(f.get('number')||'').trim();
+  const date=String(f.get('date')||'').trim();
+  const amount=String(f.get('amount')||'').trim();
+  const status=String(f.get('status')||'Da preparare').trim();
+  const file=e.target.querySelector('input[name="pdf"]')?.files?.[0]||null;
+  if(!number){alert('Inserisci il numero del preventivo.');return}
+  if(amount!=='' && (isNaN(Number(amount)) || Number(amount)<0)){alert('Inserisci un importo valido.');return}
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  let pdfUrl='';
+  try{
+    if(file){
+      if(file.type!=='application/pdf'){alert('Il preventivo deve essere un PDF.');return}
+      const safe=(file.name||'preventivo.pdf').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_');
+      const path=`commesse/${j.id}/preventivi/${Date.now()}_${safe}`;
+      const {error:upErr}=await sb.storage.from('foto-commesse').upload(path,file,{contentType:'application/pdf',upsert:false});
+      if(upErr) throw upErr;
+      pdfUrl=sb.storage.from('foto-commesse').getPublicUrl(path).data?.publicUrl||'';
+    }
+    const payload={commessa_id:j.id,numero_preventivo:number,data_preventivo:date||null,importo:amount===''?null:Number(amount),stato:status,pdf_preventivo:pdfUrl||null};
+    const {data,error}=await sb.from('preventivi').insert(payload).select('id,commessa_id,numero_preventivo,data_preventivo,importo,stato,pdf_preventivo,created_at,updated_at').single();
+    if(error){
+      if(pdfUrl){
+        const marker='/storage/v1/object/public/foto-commesse/';
+        const ix=pdfUrl.indexOf(marker);
+        if(ix>=0) await sb.storage.from('foto-commesse').remove([decodeURIComponent(pdfUrl.slice(ix+marker.length))]);
+      }
+      throw error;
+    }
+    j.quotes=j.quotes||[];
+    j.quotes.unshift({id:data.id,number:data.numero_preventivo||'',date:data.data_preventivo||'',amount:data.importo??'',status:data.stato||status,pdf:data.pdf_preventivo||'',created:data.created_at||''});
+    save();
+    renderJobDetail();
+    alert('Preventivo salvato correttamente su Supabase.');
+  }catch(err){console.error('Salvataggio preventivo:',err);alert('Errore nel salvataggio del preventivo su Supabase: '+(err.message||''));}
+}
+
+async function deleteQuote(id){
+  const j=currentJob;
+  const q=(j?.quotes||[]).find(x=>String(x.id)===String(id));
+  if(!q) return;
+  if(!confirm('Eliminare questo preventivo?')) return;
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  const {error}=await sb.from('preventivi').delete().eq('id',q.id);
+  if(error){alert('Errore nell’eliminazione del preventivo: '+(error.message||''));return}
+  if(q.pdf){
+    const marker='/storage/v1/object/public/foto-commesse/';
+    const ix=q.pdf.indexOf(marker);
+    if(ix>=0) await sb.storage.from('foto-commesse').remove([decodeURIComponent(q.pdf.slice(ix+marker.length))]);
+  }
+  j.quotes=j.quotes.filter(x=>String(x.id)!==String(id));
+  save(); renderJobDetail();
+}
+
+function quoteTab(j){
+  j.quotes=j.quotes||[];
+  const rows=j.quotes.map(q=>`<div class="card" style="margin-bottom:10px"><div class="row"><div><b>Preventivo ${esc(q.number||'')}</b><br><span class="small muted">${q.date?new Date(q.date+'T00:00:00').toLocaleDateString('it-IT'):'Data non indicata'} · ${q.amount!==''&&q.amount!=null?'€ '+Number(q.amount).toLocaleString('it-IT',{minimumFractionDigits:2}):'Importo non indicato'}</span></div><div><span class="badge">${esc(q.status||'Da preparare')}</span></div></div>${q.pdf?`<div style="margin-top:8px"><a href="${esc(q.pdf)}" target="_blank" rel="noopener">📄 Apri PDF preventivo</a></div>`:''}<div style="margin-top:10px"><button class="danger" onclick="deleteQuote('${String(q.id).replace(/'/g,"\\'")}')">Elimina</button></div></div>`).join('');
+  return `<div class="small muted" style="margin-bottom:12px">Qui registriamo i preventivi della commessa. È possibile avere più versioni dello stesso preventivo.</div>
+  ${rows||'<div class="empty">Nessun preventivo registrato.</div>'}
+  <div class="card"><h3>Nuovo preventivo</h3><form onsubmit="saveQuote(event)">
+    <div class="grid2"><div class="field"><label>Numero preventivo *</label><input name="number" required placeholder="es. PREV-001"></div><div class="field"><label>Data preventivo</label><input name="date" type="date"></div>
+    <div class="field"><label>Importo €</label><input name="amount" type="number" min="0" step="0.01" placeholder="0,00"></div>
+    <div class="field"><label>Stato</label><select name="status">${['Da preparare','Inviato','Accettato','Rifiutato'].map(x=>`<option>${x}</option>`).join('')}</select></div></div>
+    <div class="field"><label>PDF preventivo</label><input name="pdf" type="file" accept="application/pdf"></div>
+    <button type="submit">Salva preventivo</button>
+  </form></div>`;
+}
+
 async function loadSurveyForJob(j){
   const sb=await getGestionaleSupabase();
   if(!sb || !j?.id) return;
@@ -908,7 +1002,7 @@ function photosTab(j){
   j.photos=j.photos||[];
   const pre=j.photos.filter(p=>(p.phase||'').toLowerCase()==='pre-lavori');
   const other=j.photos.filter(p=>(p.phase||'').toLowerCase()!=='pre-lavori');
-  const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt="" title="Apri foto" onclick="openPhoto(this.src)"><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
+  const photoCard=p=>{ const photoUrl=String(p.url||p.data||''); const safeUrl=encodeURIComponent(photoUrl); const safeId=encodeURIComponent(String(p.id||'')); return `<div><img src="${esc(photoUrl)}" alt="" title="Apri foto" onclick="openPhoto(decodeURIComponent('${safeUrl}'))"><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto(decodeURIComponent('${safeId}'))">Elimina</button></div>`; };
   return `<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>${pre.length?`<div class="photo-grid">${pre.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna foto pre-lavori.</div>'}</div>
   <div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${other.length?`<div class="photo-grid">${other.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna altra foto.</div>'}</div>`;
 }
