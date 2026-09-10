@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Gestionale Azienda V4</title>
+<title>Gestionale Azienda V5</title>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--ink:#18212b;--muted:#667381;--line:#dfe4e8;--accent:#1769aa;--ok:#208a55;--warn:#c98300;--bad:#b64040}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px s
 </head>
 <body>
 <header>
-  <h1>Gestionale Azienda — V4</h1>
+  <h1>Gestionale Azienda — V5</h1>
   <div class="top-actions"><button type="button" class="secondary" id="supabaseTestBtn" onclick="testSupabaseConnection()">☁ Test Supabase</button>
     <button onclick="exportData()">Backup</button>
     <label class="btn secondary" style="display:inline-block;color:#26333d">Ripristina <input id="importFile" type="file" accept=".json" hidden onchange="importData(event)"><button type="button" class="secondary camera-pdf"
@@ -479,7 +479,7 @@ async function loadJobsFromSupabase(){
   const sb=await getGestionaleSupabase();
   if(!sb) return;
   try{
-    const {data:cloudRaw,error}=await sb.from('commessa').select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').order('created_at',{ascending:true});
+    const {data:cloudRaw,error}=await sb.from('commessa').select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').order('created_at',{ascending:true});
     if(error){ console.error('loadJobsFromSupabase:',error); return; }
     const cloud=cloudRaw||[];
     // Porta nel cloud eventuali commesse locali non ancora presenti.
@@ -496,7 +496,7 @@ async function loadJobsFromSupabase(){
         stato:localJob.status||'Aperta',
         "Descrizione":localJob.description||null,
         data_apertura:localJob.created||new Date().toISOString()
-      }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').single();
+      }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
       if(!insErr && ins){ cloud.push(ins); localJob.id=ins.id; }
     }
     db.jobs=cloud.map(c=>{
@@ -504,7 +504,7 @@ async function loadJobsFromSupabase(){
       return {
         id:c.id, number:c.numero_commessa, clientId:c.cliente_id, type:c.tipo_lavoro,
         address:c.indirizzo_lavori||'', manager:c.responsabile||'', status:c.stato||'Aperta',
-        description:c['Descrizione']||'', created:c.data_apertura||c.created_at||new Date().toISOString(),
+        description:c.descrizione||'', created:c.data_apertura||c.created_at||new Date().toISOString(),
         closed:c.data_chiusura||'', survey:old?.survey||{}, pv:old?.pv||{},
         practice:old?.practice||{docs:{},files:{},values:{},status:'Documenti da raccogliere'},
         tasks:old?.tasks||defaultTasks(c.tipo_lavoro), photos:old?.photos||[],
@@ -532,10 +532,10 @@ async function addJob(e){
   const {data:inserted,error}=await sb.from('commessa').insert({
     cliente_id:clientId, numero_commessa:number, tipo_lavoro:type,
     indirizzo_lavori:address||null, responsabile:manager||null,
-    stato:status||'Aperta', "Descrizione":description||null
-  }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,"Descrizione",data_apertura,data_chiusura,created_at,updated_at').single();
+    stato:status||'Aperta', descrizione:description||null
+  }).select('id,cliente_id,numero_commessa,tipo_lavoro,indirizzo_lavori,responsabile,stato,descrizione,data_apertura,data_chiusura,created_at,updated_at').single();
   if(error){console.error('Salvataggio commessa Supabase:',error);alert('Errore nel salvataggio della commessa su Supabase: '+(error.message||'verifica la tabella commessa.'));return}
-  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted['Descrizione']||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],testing:{},invoices:[]};
+  let j={id:inserted.id,number:inserted.numero_commessa,clientId:inserted.cliente_id,type:inserted.tipo_lavoro,address:inserted.indirizzo_lavori||'',manager:inserted.responsabile||'',status:inserted.stato||'Aperta',description:inserted.descrizione||'',created:inserted.data_apertura||inserted.created_at||new Date().toISOString(),closed:inserted.data_chiusura||'',survey:{},pv:{},practice:{docs:{},files:{},values:{},status:'Documenti da raccogliere'},tasks:defaultTasks(type),photos:[],documents:[],testing:{},invoices:[]};
   db.jobs.push(j);save();openJob(j.id)
 }
 function defaultTasks(type){if(type==='Fotovoltaico')return ['Preparazione area','Montaggio struttura','Installazione moduli','Posa tubazioni','Posa cavi','Installazione inverter','Installazione accumulo','Installazione quadri','Collegamenti elettrici','Prove e verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}));return ['Preparazione','Lavorazione','Verifiche','Pulizia area','Fine lavori'].map(x=>({id:id(),name:x,status:'Da fare',note:''}))}
@@ -544,7 +544,7 @@ function renderJobs(){
  el.innerHTML=`<div class="card"><div class="row"><div><h2 style="margin:0">Commesse</h2></div><input id="jobSearch" placeholder="Cerca numero, cliente, tipo..." oninput="filterJobs()"></div><div id="jobTable"></div></div>`;filterJobs()
 }
 function filterJobs(){let q=(document.getElementById('jobSearch')?.value||'').toLowerCase();let rows=db.jobs.filter(j=>(j.number+' '+clientName(j.clientId)+' '+j.type).toLowerCase().includes(q));document.getElementById('jobTable').innerHTML=rows.length?`<table><tr><th>Numero</th><th>Cliente</th><th>Tipo</th><th>Stato</th><th>Avanzamento</th><th></th></tr>${rows.map(j=>`<tr><td>${esc(j.number)}</td><td>${esc(clientName(j.clientId))}</td><td>${esc(j.type)}</td><td>${badge(j.status)}</td><td>${progress(j)}%</td><td><button onclick="openJob('${j.id}')">Apri</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun risultato.</div>'}
-function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail');if(currentJob) loadSurveyForJob(currentJob)}
+function openJob(jid){currentJob=db.jobs.find(j=>j.id===jid);currentTab='overview';showView('jobdetail');if(currentJob){loadSurveyForJob(currentJob);loadPhotosForJob(currentJob)}}
 async function jobSave(){
   let j=db.jobs.find(x=>x.id===currentJob.id);
   if(!j) return;
@@ -553,7 +553,7 @@ async function jobSave(){
   if(!sb || !j.id) return;
   const {error}=await sb.from('commessa').update({
     numero_commessa:j.number, indirizzo_lavori:j.address||null, responsabile:j.manager||null,
-    stato:j.status||'Aperta', "Descrizione":j.description||null, data_chiusura:j.closed||null
+    stato:j.status||'Aperta', descrizione:j.description||null, data_chiusura:j.closed||null
   }).eq('id',j.id);
   if(error) console.error('Aggiornamento commessa Supabase:',error);
 }
@@ -798,8 +798,106 @@ function verifyPracticeDoc(docName, checked){
 function tasksTab(j){return `<h3>Attività</h3>${j.tasks.map(t=>`<div class="card"><div class="row"><b>${esc(t.name)}</b><select onchange="let x=currentJob.tasks.find(z=>z.id==='${t.id}');x.status=this.value;jobSave()">${['Da fare','In corso','Completata','Problema'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></div><textarea placeholder="Note / problema..." onchange="let x=currentJob.tasks.find(z=>z.id==='${t.id}');x.note=this.value;jobSave()">${esc(t.note)}</textarea><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'${t.name.replace(/'/g,"\\'")}')"></div>`).join('')}<button onclick="addTask()">+ Aggiungi attività</button>`;
 }
 function addTask(){let n=prompt('Nome attività');if(n){currentJob.tasks.push({id:id(),name:n,status:'Da fare',note:''});jobSave()}}
-function addPhotoFiles(e,phase){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.photos.push({id:id(),phase,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
-function photosTab(j){return `<div class="field"><label>Carica foto</label><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${j.photos.length?`<div class="photo-grid">${j.photos.map(p=>`<div><img src="${p.data}" alt=""><div class="small">${esc(p.phase)}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="currentJob.photos=currentJob.photos.filter(x=>x.id!=='${p.id}');jobSave()">Elimina</button></div>`).join('')}</div>`:'<div class="empty">Nessuna foto.</div>'}`}
+async function loadPhotosForJob(j){
+  const sb=await getGestionaleSupabase();
+  if(!sb || !j?.id) return;
+  try{
+    const {data,error}=await sb.from('foto')
+      .select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note')
+      .eq('commessa_id',j.id)
+      .order('data_foto',{ascending:false});
+    if(error){console.error('loadPhotosForJob:',error);return;}
+    const cloud=(data||[]).map(x=>({
+      id:x.id, phase:x.fase||'Generale', name:x.nome_file||'Foto',
+      date:x.data_foto||new Date().toISOString(), url:x.percorso_file||'',
+      note:x.note||'', cloud:true
+    }));
+    const localOnly=(j.photos||[]).filter(p=>!p.cloud && p.data);
+    j.photos=[...cloud,...localOnly];
+    save();
+    if(currentJob?.id===j.id && currentTab==='photos') renderJobDetail();
+  }catch(e){console.error('loadPhotosForJob:',e)}
+}
+
+function photoPathName(job,phase,file){
+  const cleanName=(file.name||'foto').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9._-]+/g,'_');
+  const cleanPhase=(phase||'generale').toLowerCase().replace(/[^a-z0-9_-]+/g,'-');
+  return `commesse/${job.id}/${cleanPhase}/${Date.now()}_${Math.random().toString(36).slice(2,8)}_${cleanName}`;
+}
+
+async function addPhotoFiles(e,phase){
+  const files=[...e.target.files];
+  e.target.value='';
+  if(!files.length || !currentJob?.id) return;
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  currentJob.photos=currentJob.photos||[];
+  let uploaded=0;
+  for(const file of files){
+    if(!file.type.startsWith('image/')){alert('Puoi caricare solo immagini.');continue}
+    try{
+      const path=photoPathName(currentJob,phase,file);
+      const {error:uploadError}=await sb.storage.from('foto-commesse').upload(path,file,{contentType:file.type,upsert:false});
+      if(uploadError) throw uploadError;
+      const {data:urlData}=sb.storage.from('foto-commesse').getPublicUrl(path);
+      const {data:row,error:insertError}=await sb.from('foto').insert({
+        commessa_id:currentJob.id,
+        fase:phase||'Generale',
+        operatore_id:null,
+        nome_file:file.name,
+        percorso_file:urlData?.publicUrl||'',
+        data_foto:new Date().toISOString(),
+        note:null
+      }).select('id,commessa_id,fase,operatore_id,nome_file,percorso_file,data_foto,note').single();
+      if(insertError){
+        await sb.storage.from('foto-commesse').remove([path]);
+        throw insertError;
+      }
+      currentJob.photos.unshift({
+        id:row.id,phase:row.fase||phase,name:row.nome_file||file.name,
+        date:row.data_foto||new Date().toISOString(),url:row.percorso_file||urlData?.publicUrl||'',cloud:true
+      });
+      uploaded++;
+    }catch(err){
+      console.error('Caricamento foto:',err);
+      alert(`Errore nel caricamento della foto "${file.name}": ${err.message||'operazione non riuscita'}`);
+    }
+  }
+  save();
+  renderJobDetail();
+  if(uploaded) alert(`${uploaded} foto caricata${uploaded===1?'':'e'} correttamente su Supabase.`);
+}
+
+async function deletePhoto(photoId){
+  const p=(currentJob?.photos||[]).find(x=>String(x.id)===String(photoId));
+  if(!p) return;
+  if(!confirm('Eliminare questa foto?')) return;
+  const sb=await getGestionaleSupabase();
+  if(!sb){alert('Supabase non disponibile.');return}
+  if(p.cloud){
+    let path='';
+    try{
+      const marker='/storage/v1/object/public/foto-commesse/';
+      const idx=(p.url||'').indexOf(marker);
+      if(idx>=0) path=decodeURIComponent(p.url.slice(idx+marker.length));
+    }catch{}
+    const {error:dbError}=await sb.from('foto').delete().eq('id',p.id);
+    if(dbError){console.error(dbError);alert('Errore nell’eliminazione della foto: '+(dbError.message||''));return}
+    if(path) await sb.storage.from('foto-commesse').remove([path]);
+  }
+  currentJob.photos=currentJob.photos.filter(x=>String(x.id)!==String(photoId));
+  save();
+  renderJobDetail();
+}
+
+function photosTab(j){
+  j.photos=j.photos||[];
+  const pre=j.photos.filter(p=>(p.phase||'').toLowerCase()==='pre-lavori');
+  const other=j.photos.filter(p=>(p.phase||'').toLowerCase()!=='pre-lavori');
+  const photoCard=p=>`<div><img src="${esc(p.url||p.data||'')}" alt=""><div class="small">${esc(p.phase||'Generale')}<br>${new Date(p.date).toLocaleString('it-IT')}</div><button class="danger" onclick="deletePhoto('${p.id}')">Elimina</button></div>`;
+  return `<div class="card"><h3>Foto pre-lavori</h3><div class="small muted" style="margin-bottom:10px">Le foto vengono salvate direttamente su Supabase e collegate automaticamente alla commessa.</div><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'pre-lavori')"></div>${pre.length?`<div class="photo-grid">${pre.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna foto pre-lavori.</div>'}</div>
+  <div class="card"><h3>Altre foto della commessa</h3><div class="field"><input type="file" accept="image/*" capture="environment" multiple onchange="addPhotoFiles(event,'generale')"></div>${other.length?`<div class="photo-grid">${other.map(photoCard).join('')}</div>`:'<div class="empty">Nessuna altra foto.</div>'}</div>`;
+}`}
 function addDocumentFiles(e,label){[...e.target.files].forEach(file=>{let r=new FileReader();r.onload=()=>{currentJob.documents.push({id:id(),label,name:file.name,date:new Date().toISOString(),data:r.result});jobSave()};r.readAsDataURL(file)});e.target.value=''}
 function docsTab(j){return `<div class="field"><label>Carica documento</label><input type="file" multiple onchange="addDocumentFiles(event,'Documento commessa')"></div>${j.documents.length?`<table><tr><th>Categoria</th><th>File</th><th>Data</th><th></th></tr>${j.documents.map(d=>`<tr><td>${esc(d.label)}</td><td><a href="${d.data}" download="${esc(d.name)}">${esc(d.name)}</a></td><td>${new Date(d.date).toLocaleString('it-IT')}</td><td><button class="danger" onclick="currentJob.documents=currentJob.documents.filter(x=>x.id!=='${d.id}');jobSave()">Elimina</button></td></tr>`).join('')}</table>`:'<div class="empty">Nessun documento.</div>'}`}
 function addInvoice(e){e.preventDefault();let f=new FormData(e.target);currentJob.invoices.push({type:f.get('type'),amount:f.get('amount'),status:f.get('status')});jobSave();e.target.reset()}
